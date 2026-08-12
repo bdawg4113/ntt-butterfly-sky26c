@@ -3,6 +3,9 @@ module twiddle_rom(
     input [127:0] lut,      // 128 x 12 LUT
                             // ROM[1] = 1729... ROM[127] 
     output [11:0] zeta      // 12 bit wide ROM factor 
+
+    
+
 );
 
     
