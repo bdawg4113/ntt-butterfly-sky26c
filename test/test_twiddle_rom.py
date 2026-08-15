@@ -3,14 +3,17 @@ from cocotb.triggers import Timer
 
 Q, ZC = 3329, 17
 
+# 7 bit reversion 
 def bitrev7(i):
     r = 0 
     for b in range (7): 
         r = (r << 1) | ((i >> b) & 1)
     return r 
 
+# golden model zeta to run the bitrev7
 def golden_zeta(k):
     return pow(ZC, bitrev7(k), Q)
+
 
 @cocotb.test()
 async def test_twiddle_rom(dut):
