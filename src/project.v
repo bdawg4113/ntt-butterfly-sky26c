@@ -21,7 +21,7 @@ module tt_um_example (
 
   //============== NTT Engine Instantiation ======================================================
   ntt_top u_ntt_top(
-    .clk      (canlk),
+    .clk      (clk),
     .rst      (~rst_n),         // our design uses an active high reset, TT uses active low rst
     .start    (start_sig), 
     .done     (done_sig)
