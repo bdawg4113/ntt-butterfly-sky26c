@@ -31,7 +31,7 @@ async def test_tt_wrapper(dut):
     cycles = 0
     max_cycles = 5000
     
-    while int(dut.uo_out.value & 0x01) == 0:
+    while (int(dut.uo_out.value) & 0x01) == 0:
         await RisingEdge(dut.clk)
         cycles += 1
         if cycles > max_cycles:
@@ -39,4 +39,4 @@ async def test_tt_wrapper(dut):
             assert False
             
     dut._log.info(f"Engine completed via external pins in {cycles} clock cycles!")
-    assert int(dut.uo_out.value & 0x01) == 1
+    assert (int(dut.uo_out.value) & 0x01) == 1
