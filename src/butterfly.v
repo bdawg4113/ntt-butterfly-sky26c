@@ -11,7 +11,9 @@
 //'b' only enters the multiply 
 
 // Combinational (no clock yet - pipelining added in later revisions) 
+// main top wrapper for mod_mult, mod_add, and mod_sub. 
 
+// is a submodule for ntt_top.v, that combines coeff_mem, control_fsm, twiddle_rom, and butterfly into one top wrapper module 
 module butterfly(
     input wire [11:0] a,        //f[j]
     input wire [11:0] b,        //f[j+len]

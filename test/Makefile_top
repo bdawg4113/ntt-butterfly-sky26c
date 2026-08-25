@@ -1,0 +1,15 @@
+# Makefile_top
+SIM = icarus
+TOPLEVEL_LANG = verilog
+VERILOG_SOURCES = $(PWD)/../src/mod_mult.v \
+                  $(PWD)/../src/mod_add.v \
+                  $(PWD)/../src/mod_sub.v \
+                  $(PWD)/../src/butterfly.v \
+                  $(PWD)/../src/twiddle_rom.v \
+                  $(PWD)/../src/coeff_mem.v \
+                  $(PWD)/../src/control_fsm.v \
+                  $(PWD)/../src/ntt_top.v
+TOPLEVEL = ntt_top
+MODULE = test_ntt_top
+
+include $(shell cocotb-config --makefiles)/Makefile.sim

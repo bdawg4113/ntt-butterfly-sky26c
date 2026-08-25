@@ -15,11 +15,29 @@ module tt_um_example (
     input  wire       clk,      // clock
     input  wire       rst_n     // reset_n - low to reset
 );
+  //============== Interconnects =================================================================
+  wire start_sig  = ui_in[0];
+  wire done_sig;
 
-  // All output pins must be assigned. If not used, assign to 0.
-  assign uo_out  = ui_in + uio_in;  // Example: ou_out is the sum of ui_in and uio_in
-  assign uio_out = 0;
-  assign uio_oe  = 0;
+  //============== NTT Engine Instantiation ======================================================
+  ntt_top u_ntt_top(
+    .clk      (canlk),
+    .rst      (~rst_n),         // our design uses an active high reset, TT uses active low rst
+    .start    (start_sig), 
+    .done     (done_sig)
+  );
+
+
+
+  //=============== Output Pin Assignments =======================================================
+  // Map done flag to bit 0, ground the rest: 
+
+  assign uo_out[0]  = done_sig;
+  assign uo_out[7:1] = 7'b0000000;  
+
+  // Disable bidirectional io pins: 
+  assign uio_oe  = 8'b00000000;
+  assign uio_out = 8'b00000000;
 
   // List all unused inputs to prevent warnings
   wire _unused = &{ena, clk, rst_n, 1'b0};
