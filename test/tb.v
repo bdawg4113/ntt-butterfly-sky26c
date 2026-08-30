@@ -27,7 +27,7 @@ module tb ();
   wire VGND = 1'b0;
 `endif
 
-  // Replace tt_um_example with your module name:
+  // The design under test:
   tt_um_ntt user_project (
 
       // Include power ports for the Gate Level test:

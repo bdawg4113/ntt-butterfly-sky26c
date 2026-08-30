@@ -1,6 +1,12 @@
-SIM = icarus
-TOPLEVEL_LANG = verilog 
-VERILOG_SOURCES = $(PWD)/../src/butterfly.v $(PWD)/../src/mod_mult.v $(PWD)/../src/mod_add.v $(PWD)/../src/mod_sub.v
-TOPLEVEL = butterfly 
-MODULE = test_butterfly
+# Makefile_bf -- block-level test for the pipelined butterfly
+SIM ?= icarus
+TOPLEVEL_LANG ?= verilog
+SRC_DIR = $(PWD)/../src
+VERILOG_SOURCES = $(SRC_DIR)/butterfly.v \
+                  $(SRC_DIR)/mod_mult.v \
+                  $(SRC_DIR)/mod_add.v \
+                  $(SRC_DIR)/mod_sub.v
+TOPLEVEL = butterfly
+COCOTB_TEST_MODULES = test_butterfly
+
 include $(shell cocotb-config --makefiles)/Makefile.sim

@@ -1,13 +1,13 @@
 # Tiny Tapeout project information
 project:
-  title:        "NTT Accelerator "      # Project title
+  title:        "NTT Butterfly Accelerator"      # Project title
   author:       "Brendon"      # Your name
   discord:      ""      # Your discord username, for communication and automatically assigning you a Tapeout role (optional)
-  description:  "Forward Number Theoretic Transform (NTT) butterfly hardware accelerator for ML-KEM."      # One line description of what your project does
+  description:  "Pipelined Cooley-Tukey butterfly co-processor for the ML-KEM (Kyber) forward NTT, with an on-chip twiddle factor ROM."      # One line description of what your project does
   language:     "Verilog" # other examples include SystemVerilog, Amaranth, VHDL, etc
-  clock_hz:     50000000       # 50MHz (20ns period from config.json)
+  clock_hz:     50000000       # 50 MHz -- matches CLOCK_PERIOD: 20 (ns) in src/config.json
   # How many tiles your design occupies? A single tile is about 167x108 uM.
-  tiles: "1x2"          # Valid values: 1x1, 1x2, 2x2, 3x2, 4x2, 6x2 or 8x2
+  tiles: "2x2"          # Valid values: 1x1, 1x2, 2x2, 3x2, 4x2, 6x2 or 8x2
 
   # Your top module name must start with "tt_um_". Make it unique by including your github username:
   top_module:  "tt_um_ntt"
@@ -16,43 +16,41 @@ project:
   # Source files must be in ./src and you must list each source file separately, one per line.
   # Don't forget to also update `PROJECT_SOURCES` in test/Makefile.
   source_files:
-  - "project.v"
-  - "ntt_top.v"
-  - "control_fsm.v"
-  - "coeff_mem.v"
+  - "tt_um_ntt.v"
+  - "bfu_stream.v"
   - "twiddle_rom.v"
   - "butterfly.v"
+  - "mod_mult.v"
   - "mod_add.v"
   - "mod_sub.v"
-  - "mod_mult.v"
 
 # The pinout of your project. Leave unused pins blank. DO NOT delete or add any pins.
 # This section is for the datasheet/website. Use descriptive names (e.g., RX, TX, MOSI, SCL, SEG_A, etc.).
 pinout:
-  # Inputs
-  ui[0]: "start"
-  ui[1]: ""
-  ui[2]: ""
-  ui[3]: ""
-  ui[4]: ""
-  ui[5]: ""
-  ui[6]: ""
-  ui[7]: ""
+  # Inputs -- operand byte bus, 4 bytes per butterfly
+  ui[0]: "din0"
+  ui[1]: "din1"
+  ui[2]: "din2"
+  ui[3]: "din3"
+  ui[4]: "din4"
+  ui[5]: "din5"
+  ui[6]: "din6"
+  ui[7]: "din7"
 
-  # Outputs
-  uo[0]: "done"
-  uo[1]: ""
-  uo[2]: ""
-  uo[3]: ""
-  uo[4]: ""
-  uo[5]: ""
-  uo[6]: ""
-  uo[7]: ""
+  # Outputs -- result byte bus, 3 bytes per butterfly
+  uo[0]: "dout0"
+  uo[1]: "dout1"
+  uo[2]: "dout2"
+  uo[3]: "dout3"
+  uo[4]: "dout4"
+  uo[5]: "dout5"
+  uo[6]: "dout6"
+  uo[7]: "dout7"
 
-  # Bidirectional pins
-  uio[0]: ""
-  uio[1]: ""
-  uio[2]: ""
+  # Bidirectional pins -- handshake (uio[0] in, uio[1..2] out)
+  uio[0]: "in_valid"
+  uio[1]: "out_valid"
+  uio[2]: "busy"
   uio[3]: ""
   uio[4]: ""
   uio[5]: ""
