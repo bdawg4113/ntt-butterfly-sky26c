@@ -3,11 +3,11 @@ project:
   title:        "ML-KEM NTT/INTT Accelerator"      # Project title
   author:       "Brendon"      # Your name
   discord:      ""      # Your discord username, for communication and automatically assigning you a Tapeout role (optional)
-  description:  "Modular arithmetic engine for the ML-KEM-512 number theoretic transform: Cooley-Tukey and Gentleman-Sande butterflies over a pipelined Montgomery multiplier and Barrett reducer."      # One line description of what your project does
+  description:  "Modular arithmetic engine for the ML-KEM-512 number theoretic transform: Cooley-Tukey and Gentleman-Sande butterflies over a shared serial Montgomery multiplier."      # One line description of what your project does
   language:     "Verilog" # other examples include SystemVerilog, Amaranth, VHDL, etc
   clock_hz:     50000000       # 50 MHz -- matches CLOCK_PERIOD: 20 (ns) in src/config.json
   # How many tiles your design occupies? A single tile is about 167x108 uM.
-  tiles: "3x2"          # Valid values: 1x1, 1x2, 2x2, 3x2, 4x2, 6x2 or 8x2
+  tiles: "1x2"          # Valid values: 1x1, 1x2, 2x2, 3x2, 4x2, 6x2 or 8x2
 
   # Your top module name must start with "tt_um_". Make it unique by including your github username:
   top_module:  "tt_um_ntt"
@@ -19,10 +19,7 @@ project:
   - "tt_um_ntt.v"
   - "bfu_io.v"
   - "bfu_core.v"
-  - "fqmul.v"
-  - "montgomery_reduce.v"
-  - "barrett_reduce.v"
-  - "twiddle_rom.v"
+  - "ser_fqmul.v"
 
 # The pinout of your project. Leave unused pins blank. DO NOT delete or add any pins.
 # This section is for the datasheet/website. Use descriptive names (e.g., RX, TX, MOSI, SCL, SEG_A, etc.).

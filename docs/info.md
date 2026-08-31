@@ -37,24 +37,24 @@ t = (a - m·q) >> 16            arithmetic shift
 means the subtraction cannot borrow out of those bits, so in hardware it collapses to a **16-bit** subtract
 of the two top halves — no 32-bit subtractor is needed.
 
-**Barrett reduction** maps any signed 16-bit value into a centred range without changing it mod q:
-
-```
-v = floor((2^26 + q/2) / q) = 20159
-t = floor((v·a + 2^25) / 2^26)
-c = a - t·q
-```
+**Range reduction without a Barrett unit.** The inverse transform needs to pull running sums back into
+range. Rather than build a dedicated Barrett reducer, the design reuses the multiplier: `fqmul(x, R mod q)`
+is `x·R·R⁻¹ = x`, and Montgomery guarantees `|t| < q`, so it returns a centred representative without
+changing the residue — exactly what Barrett was for. Folding it onto the shared multiplier removed a whole
+arithmetic unit worth 6,304 µm², a sixth of the area budget.
 
 The workhorse multiply is `fqmul(a,b) = montgomery_reduce(a·b)` — one 16×16 product into one Montgomery
-reduction. The **twiddle ROM is stored pre-multiplied by R**, so a butterfly multiply
-`fqmul(ζ·R, x) = ζ·R·x·R⁻¹ = ζ·x` lands with no stray Montgomery factor. That table is bit-identical to the
-reference Kyber `zetas` array, beginning `-1044, -758, -359, -1517, …`.
+reduction. The **twiddle factors are supplied pre-multiplied by R** (Montgomery form), so a butterfly multiply
+`fqmul(ζ·R, x) = ζ·R·x·R⁻¹ = ζ·x` lands with no stray Montgomery factor. The host holds that table — it is
+bit-identical to the reference Kyber `zetas` array, beginning `-1044, -758, -359, -1517, …`. There is no
+on-chip ROM: the FPGA already has the values, and sending ζ directly is what `basemul` needs anyway, since
+its twiddles are the signed pair `±zetas[64+i]`.
 
 ### The two butterflies
 
 ```
 Cooley-Tukey (forward)            Gentleman-Sande (inverse)
-  t     = fqmul(ζ, b)               a_out = barrett(a + b)
+  t     = fqmul(ζ, b)               a_out = reduce(a + b)
   a_out = a + t                     b_out = fqmul(ζ, b - a)
   b_out = a - t
   multiply then add/sub             add/sub then multiply
@@ -63,12 +63,17 @@ Cooley-Tukey (forward)            Gentleman-Sande (inverse)
 These are the same primitive sequenced differently, which is why one arithmetic core serves both transforms.
 The forward transform walks the twiddle index **up** from 1; the inverse walks it **down** from 127.
 
-### Why it is pipelined
+### Why the multiplier is serial
 
-Both kernels chain multipliers, and a combinational version cannot close timing. `fqmul` is split into three
-pipeline stages — one per multiply — and `barrett_reduce` into two. The core has a **uniform 5-clock
-latency in every mode**, so results never reorder when the host switches operation mid-stream, and it accepts
-a new operation every clock.
+A parallel 16×16 multiplier array costs 10,875 µm² — most of a 1x2 tile's usable area on its own. This design
+forms the product one partial product per clock instead, using a 16-bit adder and a shift register: about 17
+clocks per multiply, but a fraction of the silicon.
+
+That costs nothing real, because **the accelerator is I/O-bound, not compute-bound**. Assembling a 48-bit
+operand vector over an 8-bit bus already takes several clocks, so a one-per-clock datapath would simply sit
+idle waiting for operands. Being multi-cycle also means the operands stay put in their registers for the
+whole operation, so there is no pipeline bypass chain and no valid pipeline to keep in step — an entire
+class of structure, and its bugs, disappears.
 
 ### Operating modes
 
@@ -77,9 +82,9 @@ a new operation every clock.
 | mode | name | `a_out` | `b_out` | used for |
 | ---- | ---- | ------- | ------- | -------- |
 | 000 | CT | `a + fqmul(ζ,b)` | `a - fqmul(ζ,b)` | forward NTT |
-| 001 | GS | `barrett(a + b)` | `fqmul(ζ, b - a)` | inverse NTT |
+| 001 | GS | `reduce(a + b)` | `fqmul(ζ, b - a)` | inverse NTT |
 | 010 | FQMUL | `fqmul(a, b)` | same | scaling, basemul |
-| 011 | BARRETT | `barrett(a)` | same | range control |
+| 011 | REDUCE | `reduce(a)` | same | range control |
 | 100 | ADD | `a + b` | `a - b` | polynomial add/sub |
 
 `FQMUL` with `b = 1` is a bare `montgomery_reduce`, which is how the host strips the residual Montgomery
@@ -98,32 +103,31 @@ Put a byte on `ui_in[7:0]`, its register number on `uio_in[2:0]`, and raise `uio
 | ---- | -------- | - | ---- | -------- |
 | 0 | `a[7:0]` | | 4 | `zeta[7:0]` |
 | 1 | `a[15:8]` | | 5 | `zeta[15:8]` |
-| 2 | `b[7:0]` | | 6 | `ctrl` |
+| 2 | `b[7:0]` | | 6 | `ctrl = {5'b0, mode[2:0]}` |
 | 3 | `b[15:8]` | | 7 | reserved |
 
-`ctrl = {4'b0, zeta_from_rom, mode[2:0]}`. Registers persist between operations, so a host walking one NTT
-layer only rewrites the bytes that actually changed.
-
-**`ctrl` bit 3 selects the twiddle source.** Cleared, the core uses the 16-bit `zeta` the host wrote — which
-is what `basemul` needs, since its twiddles are the signed pair `±zetas[64+i]`. Set, the core looks up
-`zetas[zeta[6:0]]` in the on-chip ROM, so a transform only sends a 7-bit index.
+Registers persist between operations, so a host walking one NTT layer only rewrites the bytes that actually
+changed — usually just the four operand bytes, since ζ and the mode are constant across a whole layer.
 
 ### Executing and reading back
 
-A rising edge on `uio_in[4]` (`start`) latches the operands. Five clocks later four result bytes appear on
-`uo_out[7:0]`, each qualified by `uio_out[5]` (`out_valid`), low byte first:
+A rising edge on `uio_in[4]` (`start`) launches the operation. Operations are **multi-cycle**: 20 clocks for
+`CT`, `FQMUL` and `REDUCE`, 39 for `GS` (which needs two multiplies), and 1 for `ADD`. Four result bytes then
+appear on `uo_out[7:0]`, each qualified by `uio_out[5]` (`out_valid`), low byte first:
 
 ```
 a_out[7:0]   a_out[15:8]   b_out[7:0]   b_out[15:8]
 ```
 
-`uio_out[6]` (`busy`) is high from launch until the last result byte has been presented, so the host can poll
-rather than count clocks.
+`uio_out[6]` (`busy`) is high from launch until the last result byte has been presented. Poll it rather than
+counting clocks, since the operation length depends on the mode. **The operand registers must not be written
+while `busy` is high** — the core reads them directly for the whole operation instead of taking its own copy,
+which is part of how the design fits its tile.
 
 ### Running a transform
 
 A full forward NTT is 7 layers of 128 Cooley-Tukey butterflies — **896 operations**, the host supplying the
-twiddle index per block. The inverse is 896 Gentleman-Sande butterflies with the index walking down, followed
+twiddle value per block. The inverse is 896 Gentleman-Sande butterflies with the index walking down, followed
 by a 256-operation scaling pass by `f = R²/128 mod q = 1441` in `FQMUL` mode.
 
 The round trip leaves one extra Montgomery factor: `INTT(NTT(f)) ≡ f·R (mod q)`. One `FQMUL(x, 1)` per
@@ -138,9 +142,7 @@ over a pair of degree-1 polynomials mod `x² - ζ`, which the host composes from
 cd test
 make                      # pin-level: all modes, a full NTT, and an NTT->INTT round trip
 make -f Makefile_bfu      # the five-mode arithmetic core
-make -f Makefile_arith    # fqmul / montgomery_reduce
-make -f Makefile_barrett  # barrett_reduce
-make -f Makefile_rom      # all 128 Montgomery-form twiddles
+make -f Makefile_serfq    # the serial Montgomery multiply
 ```
 
 `test.py` plays the part of the host FPGA: it holds the polynomial in Python, walks the FIPS 203 address

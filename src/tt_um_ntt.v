@@ -14,6 +14,10 @@
  *   uio_out[5]   out_valid
  *   uio_out[6]   busy
  *
+ * The host supplies the twiddle factor as a full 16-bit value; there is no
+ * on-chip twiddle ROM. Operations are multi-cycle, so the host must wait for
+ * busy to fall before writing new operands.
+ *
  * SPDX-License-Identifier: Apache-2.0
  */
 

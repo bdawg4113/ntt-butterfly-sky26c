@@ -1,0 +1,6 @@
+SIM ?= icarus
+TOPLEVEL_LANG ?= verilog
+VERILOG_SOURCES = $(PWD)/../src/ser_fqmul.v
+TOPLEVEL = ser_fqmul
+COCOTB_TEST_MODULES = test_serfq
+include $(shell cocotb-config --makefiles)/Makefile.sim

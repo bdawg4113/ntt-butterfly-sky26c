@@ -71,14 +71,24 @@ def montgomery_reduce(a):
 
 
 def barrett_reduce(a):
-    """Signed Barrett reduction: maps a signed 16-bit value into a centred
-    range around 0, without changing it mod q.
+    """Signed Barrett reduction -- kept as a reference, no longer in hardware.
 
         t = floor((v*a + 2^25) / 2^26)
         barrett(a) = a - t*q
     """
     t = (BARRETT_V * a + (1 << (BARRETT_K - 1))) >> BARRETT_K
     return a - t * Q
+
+
+def reduce_mont(a):
+    """The range reduction the hardware actually performs.
+
+    fqmul(a, R mod q) = a*R*R^-1 = a, and Montgomery guarantees |t| < q, so
+    this returns a centred representative without changing the residue --
+    exactly what barrett_reduce was for. Sharing the multiplier this way let
+    the dedicated Barrett unit be deleted entirely.
+    """
+    return fqmul(a, R_MOD_Q)
 
 
 def fqmul(a, b):
@@ -109,7 +119,7 @@ def butterfly_ct(a, b, zeta):
 
 def butterfly_gs(a, b, zeta):
     """Gentleman-Sande, the inverse transform's kernel: add/sub, then multiply."""
-    return barrett_reduce(s16(a + b)), fqmul(zeta, s16(b - a))
+    return reduce_mont(s16(a + b)), fqmul(zeta, s16(b - a))
 
 
 # ---------------------------------------------------------------------------
@@ -173,21 +183,21 @@ def basemul(a0, a1, b0, b1, zeta):
 MODE_CT      = 0    # forward butterfly
 MODE_GS      = 1    # inverse butterfly
 MODE_FQMUL   = 2    # Montgomery multiply (also gives montgomery_reduce via b=1)
-MODE_BARRETT = 3    # Barrett reduction of a (mirrored on both outputs)
+MODE_REDUCE  = 3    # range reduction of a (mirrored on both outputs)
 MODE_ADD     = 4    # a+b, a-b
 
 
 def mode_ct(a, b, zeta):      return butterfly_ct(a, b, zeta)
 def mode_gs(a, b, zeta):      return butterfly_gs(a, b, zeta)
 def mode_fqmul(a, b, zeta):   return fqmul(a, b), fqmul(a, b)
-def mode_barrett(a, b, zeta): return barrett_reduce(a), barrett_reduce(a)
+def mode_reduce(a, b, zeta):  return reduce_mont(a), reduce_mont(a)
 def mode_add(a, b, zeta):     return s16(a + b), s16(a - b)
 
 MODES = {
     MODE_CT: mode_ct,
     MODE_GS: mode_gs,
     MODE_FQMUL: mode_fqmul,
-    MODE_BARRETT: mode_barrett,
+    MODE_REDUCE: mode_reduce,
     MODE_ADD: mode_add,
 }
 

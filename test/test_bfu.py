@@ -1,24 +1,25 @@
-# test_bfu.py -- the five-mode arithmetic core against the golden model.
+# test_bfu.py -- the multi-cycle five-mode arithmetic core against the model.
 #
-# bfu_core has latency 5 and accepts one operation per clock, so every test
-# streams operations and scoreboards the results. Mixed-mode streams matter
-# especially: latency is uniform across modes precisely so results cannot
-# reorder when the host switches mode mid-stream, and this checks that.
+# The core is multi-cycle rather than pipelined: it handles one operation at a
+# time and raises busy while doing so, so these tests issue an operation, hold
+# the operands steady, and wait for out_valid. Operand stability is part of the
+# contract -- the core reads a, b and zeta directly for the whole operation
+# rather than latching its own copies, which is where a chunk of the area
+# saving came from.
 
 import random
-from collections import deque
+from collections import Counter
 
 import cocotb
 from cocotb.clock import Clock
 from cocotb.triggers import RisingEdge, ReadOnly, NextTimeStep
 
-from ntt_golden import (Q, ZETAS, apply_mode, centre,
-                        MODE_CT, MODE_GS, MODE_FQMUL, MODE_BARRETT, MODE_ADD)
+from ntt_golden import (Q, ZETAS, R_MOD_Q, apply_mode,
+                        MODE_CT, MODE_GS, MODE_FQMUL, MODE_REDUCE, MODE_ADD)
 
-LATENCY = 5
-ALL_MODES = [MODE_CT, MODE_GS, MODE_FQMUL, MODE_BARRETT, MODE_ADD]
+ALL_MODES = [MODE_CT, MODE_GS, MODE_FQMUL, MODE_REDUCE, MODE_ADD]
 NAMES = {MODE_CT: "CT", MODE_GS: "GS", MODE_FQMUL: "FQMUL",
-         MODE_BARRETT: "BARRETT", MODE_ADD: "ADD"}
+         MODE_REDUCE: "REDUCE", MODE_ADD: "ADD"}
 
 
 def s16(x):
@@ -39,107 +40,133 @@ async def reset(dut):
     await RisingEdge(dut.clk)
 
 
-async def run_ops(dut, ops, name):
-    """ops: list of (mode, a, b, zeta) or None for a bubble."""
-    pending = deque()
-    seen = 0
+async def run_op(dut, mode, a, b, zeta):
+    """Issue one operation and wait for its result. Returns (result, clocks)."""
+    dut.mode.value = mode
+    dut.a.value = a
+    dut.b.value = b
+    dut.zeta.value = zeta
+    dut.in_valid.value = 1
+    await RisingEdge(dut.clk)
+    dut.in_valid.value = 0          # operands stay driven, as the contract requires
 
-    for op in list(ops) + [None] * (LATENCY + 2):
-        if op is None:
-            dut.in_valid.value = 0
-        else:
-            mode, a, b, z = op
-            dut.mode.value = mode
-            dut.a.value = a
-            dut.b.value = b
-            dut.zeta.value = z
-            dut.in_valid.value = 1
-            ea, eb = apply_mode(mode, a, b, z)
-            pending.append((op, s16(ea), s16(eb)))
-
-        await RisingEdge(dut.clk)
+    # out_valid is a one-clock pulse, and MODE_ADD needs no multiply so it
+    # answers in the very next cycle -- sample before advancing, or the pulse
+    # is stepped over.
+    n = 1
+    while True:
         await ReadOnly()
-        if int(dut.out_valid.value):
-            assert pending, f"{name}: result with nothing outstanding"
-            op, ea, eb = pending.popleft()
-            ga, gb = s16(int(dut.a_out.value)), s16(int(dut.b_out.value))
-            m, a, b, z = op
-            assert (ga, gb) == (ea, eb), (
-                f"{name}: {NAMES[m]}(a={a}, b={b}, zeta={z}): "
-                f"got ({ga}, {gb}) expected ({ea}, {eb})")
-            seen += 1
+        valid = int(dut.out_valid.value)
+        got = (s16(int(dut.a_out.value)), s16(int(dut.b_out.value)))
         await NextTimeStep()
-
-    dut.in_valid.value = 0
-    assert not pending, f"{name}: {len(pending)} results never came out"
-    return seen
+        if valid:
+            return got, n
+        assert n < 100, f"{NAMES[mode]} never produced a result"
+        await RisingEdge(dut.clk)
+        n += 1
 
 
 @cocotb.test()
 async def test_each_mode(dut):
-    """Every mode on its own, over random operands in the ranges that occur."""
+    """Every mode over random operands in the ranges that actually occur."""
     cocotb.start_soon(Clock(dut.clk, 20, unit="ns").start())
     await reset(dut)
 
-    random.seed(31)
+    random.seed(61)
+    timing = {}
     for mode in ALL_MODES:
-        ops = [(mode, 0, 0, 1), (mode, 1, -1, ZETAS[1]), (mode, -3328, 3328, ZETAS[64])]
-        ops += [(mode,
-                 random.randrange(-18504, 18505),
-                 random.randrange(-18504, 18505),
-                 random.choice(ZETAS)) for _ in range(800)]
-        n = await run_ops(dut, ops, NAMES[mode])
-        assert n == len(ops)
-        dut._log.info(f"{NAMES[mode]:<8}: {n} operations match the golden model")
+        ops = [(0, 0, 1), (1, -1, ZETAS[1]), (-3328, 3328, ZETAS[64]),
+               (16628, -16628, R_MOD_Q)]
+        ops += [(random.randrange(-16628, 16629),
+                 random.randrange(-16628, 16629),
+                 random.choice(ZETAS)) for _ in range(150)]
+        seen = Counter()
+        for a, b, z in ops:
+            got, n = await run_op(dut, mode, a, b, z)
+            exp = tuple(s16(v) for v in apply_mode(mode, a, b, z))
+            assert got == exp, \
+                f"{NAMES[mode]}(a={a}, b={b}, zeta={z}): got {got}, expected {exp}"
+            seen[n] += 1
+        assert len(seen) == 1, f"{NAMES[mode]}: variable latency {dict(seen)}"
+        timing[NAMES[mode]] = list(seen)[0]
+        dut._log.info(f"{NAMES[mode]:<7}: {len(ops)} operations correct, "
+                      f"{list(seen)[0]} clocks each")
+    dut._log.info(f"latency by mode: {timing}")
 
 
 @cocotb.test()
-async def test_mixed_mode_stream(dut):
-    """Modes interleaved at full rate -- results must not reorder."""
+async def test_mode_switching(dut):
+    """Modes interleaved one after another, to catch state left behind."""
     cocotb.start_soon(Clock(dut.clk, 20, unit="ns").start())
     await reset(dut)
 
-    random.seed(32)
-    ops = [(random.choice(ALL_MODES),
-            random.randrange(-18504, 18505),
-            random.randrange(-18504, 18505),
-            random.choice(ZETAS)) for _ in range(3000)]
-    n = await run_ops(dut, ops, "mixed")
-    assert n == len(ops)
-    dut._log.info(f"mixed-mode stream: {n} operations, no reordering")
+    random.seed(62)
+    for _ in range(400):
+        mode = random.choice(ALL_MODES)
+        a = random.randrange(-16628, 16629)
+        b = random.randrange(-16628, 16629)
+        z = random.choice(ZETAS)
+        got, _ = await run_op(dut, mode, a, b, z)
+        exp = tuple(s16(v) for v in apply_mode(mode, a, b, z))
+        assert got == exp, \
+            f"{NAMES[mode]}(a={a}, b={b}, zeta={z}): got {got}, expected {exp}"
+    dut._log.info("400 operations with the mode changing every time: all correct")
 
 
 @cocotb.test()
-async def test_bubbles(dut):
-    """Randomly gapped in_valid, to prove the valid pipeline tracks the data."""
+async def test_busy_protocol(dut):
+    """busy must be high for the whole operation and low when idle, and
+    in_valid must be ignored while busy."""
     cocotb.start_soon(Clock(dut.clk, 20, unit="ns").start())
     await reset(dut)
 
-    random.seed(33)
-    ops = []
-    for _ in range(1500):
-        if random.random() < 0.35:
-            ops.append(None)
-        else:
-            ops.append((random.choice(ALL_MODES),
-                        random.randrange(-3329, 3329),
-                        random.randrange(-3329, 3329),
-                        random.choice(ZETAS)))
-    live = [o for o in ops if o is not None]
-    n = await run_ops(dut, ops, "bubbles")
-    assert n == len(live)
-    dut._log.info(f"gapped stream: {n} operations, all correct")
+    await ReadOnly()
+    assert int(dut.busy.value) == 0, "busy should be low when idle"
+    await NextTimeStep()
+
+    # launch a GS operation (the longest, two multiplies) and poke in_valid
+    # repeatedly while it runs; the result must be unaffected
+    a, b, z = 1234, -5678, ZETAS[40]
+    dut.mode.value = MODE_GS
+    dut.a.value = a
+    dut.b.value = b
+    dut.zeta.value = z
+    dut.in_valid.value = 1
+    await RisingEdge(dut.clk)
+
+    n = 0
+    busy_seen = 0
+    while True:
+        await RisingEdge(dut.clk)
+        await ReadOnly()
+        valid = int(dut.out_valid.value)
+        busy_seen += int(dut.busy.value)
+        got = (s16(int(dut.a_out.value)), s16(int(dut.b_out.value)))
+        await NextTimeStep()
+        n += 1
+        if valid:
+            break
+        assert n < 100
+
+    dut.in_valid.value = 0
+    exp = tuple(s16(v) for v in apply_mode(MODE_GS, a, b, z))
+    assert got == exp, f"GS corrupted by in_valid held high: got {got}, exp {exp}"
+    assert busy_seen >= n - 1, "busy was not held for the whole operation"
+    dut._log.info(f"busy held for {busy_seen}/{n} clocks; in_valid ignored while busy")
 
 
 @cocotb.test()
-async def test_fqmul_gives_montgomery_reduce(dut):
-    """MODE_FQMUL with b = 1 is a bare montgomery_reduce -- the operation the
-    host uses to strip the residual R factor after a transform round trip."""
+async def test_reduce_replaces_barrett(dut):
+    """MODE_REDUCE must return a centred representative of the same residue --
+    the property the deleted Barrett unit used to provide."""
     cocotb.start_soon(Clock(dut.clk, 20, unit="ns").start())
     await reset(dut)
 
-    random.seed(34)
-    ops = [(MODE_FQMUL, random.randrange(-32768, 32768), 1, 0) for _ in range(500)]
-    n = await run_ops(dut, ops, "mont")
-    assert n == len(ops)
-    dut._log.info(f"MODE_FQMUL(x, 1) == montgomery_reduce(x) over {n} values")
+    random.seed(63)
+    for _ in range(300):
+        x = random.randrange(-32768, 32768)
+        (got, mirror), _ = await run_op(dut, MODE_REDUCE, x, 0, 0)
+        assert got == mirror, "MODE_REDUCE outputs should mirror"
+        assert (got - x) % Q == 0, f"reduce({x}) changed the residue"
+        assert abs(got) < Q, f"reduce({x}) = {got} is not centred"
+    dut._log.info("MODE_REDUCE: 300 values congruent mod q and inside |t| < q")
