@@ -1,24 +1,37 @@
 // ser_fqmul.v -- serial Montgomery multiply: fqmul(a,b) = a*b*R^-1 mod q
 //
-// Computes the same function as a parallel fqmul, but forms the 16x16 product
-// one partial product per clock instead of in a single combinational array.
+//   cycles 1..16   p = a * b, one partial product per clock
+//   cycle  17      m = (p mod 2^16) * QINV
+//   cycle  18      t = p_hi - (m*q)_hi
 //
-//   cycles 1..16   p = a * b, by shift-and-add
-//   cycle  17      m = (p mod 2^16) * QINV ; t = p_hi - (m*q)_hi
+// About 19 clocks per result. That is deliberate: the byte-serial pin interface
+// cannot deliver operands anywhere near one per clock, so multiply latency is
+// nearly free, while a parallel 16x16 array cost 10,875 um2 -- most of a 1x2
+// tile's usable area on its own.
 //
-// About 18 clocks per result, against 3 for the parallel pipelined version.
-// That is deliberate: the byte-serial pin interface cannot deliver operands
-// anywhere near one per clock, so multiply latency is nearly free, while the
-// parallel 16x16 array cost 10,875 um2 of the area budget. Trading it for a
-// 16-bit adder and a shift register is what lets the design fit a 1x2 tile.
+// ---------------------------------------------------------------------------
+// Why the accumulator shifts right rather than the multiplicand shifting left
+// ---------------------------------------------------------------------------
+// The obvious serial multiplier holds a 32-bit accumulator and shifts the
+// multiplicand up into it. That needs a 32-bit adder, and its ripple carry has
+// to settle in one clock. Post-layout timing on exactly that structure put the
+// worst path at 21.67 ns against a 20 ns period -- a setup violation of
+// 0.97 ns at the slow corner, right through acc[3] and up the carry chain.
 //
-// Because the multiply is multi-cycle, the operands sit still in their input
-// registers for its whole duration -- so unlike the pipelined version there is
-// no bypass chain to carry values across pipeline cuts, and no valid pipeline
-// to keep in step. Multi-cycle removes an entire class of structure.
+// This version keeps the classic shift-right form instead: the accumulator A
+// holds only the top half, the multiplier register Q doubles as the bottom half
+// of the product, and the pair shifts right one place per step. The adder is
+// then 17 bits rather than 32, halving the carry chain, and the multiplicand
+// register M stops shifting so it stays 16 bits wide. Shorter path and less
+// area from one restructuring.
 //
-// Signed handling: for b in two's complement, bit 15 carries weight -2^15, so
-// the final iteration subtracts the partial product instead of adding it.
+// The Montgomery reduction is also split across two clocks rather than one.
+// Folding both constant multiplies (by QINV, then by q) into a single cycle
+// chains them, and with the adder path now shorter that chain would have become
+// the critical path in its place.
+//
+// Signed handling: for b in two's complement bit 15 carries weight -2^15, so
+// the final step subtracts the partial product instead of adding it.
 //
 //   |a*b| < q * 2^15 must hold for the reduction to be exact, and |t| < q.
 
@@ -40,60 +53,73 @@ module ser_fqmul (
 
     localparam [1:0] S_IDLE = 2'd0,
                      S_MUL  = 2'd1,
-                     S_RED  = 2'd2;
+                     S_RED1 = 2'd2,
+                     S_RED2 = 2'd3;
 
     reg [1:0]         state;
-    reg signed [31:0] acc;      // running product
-    reg signed [31:0] mcand;    // a, shifted left one place per step
-    reg        [15:0] mplier;   // b, shifted right one place per step
+    reg signed [16:0] acc;      // running product, top half (one spare bit for carry)
+    reg        [15:0] qr;       // multiplier, and the bottom half of the product
+    reg signed [15:0] mcand;    // multiplicand; does not shift
     reg        [4:0]  cnt;      // steps remaining
+    reg signed [15:0] m;        // Montgomery factor, held between the two reduce steps
 
     wire last = (cnt == 5'd1);
 
-    // ---- the Montgomery reduction, one cycle -----------------------------
-    // m only needs its low 16 bits, and m*q agrees with acc in those bits by
-    // construction, so the subtraction cannot borrow out of them: the whole
-    // reduction is a 16-bit subtract of the two top halves.
-    wire signed [31:0] m_full = $signed(acc[15:0]) * QINV;
-    wire signed [15:0] m      = m_full[15:0];
+    // ---- one multiply step ------------------------------------------------
+    // 17-bit add, then the 33-bit pair {acc, qr} shifts right one place.
+    wire signed [16:0] mcand_ext = {mcand[15], mcand};
+    wire signed [16:0] addend    = qr[0] ? (last ? -mcand_ext : mcand_ext)
+                                         : 17'sd0;
+    wire signed [16:0] sum       = acc + addend;
+
+    // ---- the reduction ----------------------------------------------------
+    // After the loop the product is {acc[15:0], qr}: qr holds its low 16 bits
+    // and acc its high 16. m only needs its low 16 bits, and m*q agrees with
+    // the product in exactly those bits by construction, so the subtraction
+    // cannot borrow out of them -- the reduction is a 16-bit subtract of the
+    // two top halves, never a 32-bit one.
+    wire signed [31:0] m_full = $signed(qr) * QINV;
     wire signed [31:0] mq     = m * Q;
-    wire signed [15:0] t_nxt  = acc[31:16] - mq[31:16];
+    wire signed [15:0] t_nxt  = acc[15:0] - mq[31:16];
 
     assign busy = (state != S_IDLE);
 
     always @(posedge clk) begin
         if (rst) begin
-            state  <= S_IDLE;
-            acc    <= 32'sd0;
-            mcand  <= 32'sd0;
-            mplier <= 16'd0;
-            cnt    <= 5'd0;
-            c      <= 16'sd0;
-            done   <= 1'b0;
+            state <= S_IDLE;
+            acc   <= 17'sd0;
+            qr    <= 16'd0;
+            mcand <= 16'sd0;
+            cnt   <= 5'd0;
+            m     <= 16'sd0;
+            c     <= 16'sd0;
+            done  <= 1'b0;
         end else begin
             done <= 1'b0;
             case (state)
                 S_IDLE: begin
                     if (start) begin
-                        acc    <= 32'sd0;
-                        mcand  <= {{16{a[15]}}, a};
-                        mplier <= b;
-                        cnt    <= 5'd16;
-                        state  <= S_MUL;
+                        acc   <= 17'sd0;
+                        qr    <= b;
+                        mcand <= a;
+                        cnt   <= 5'd16;
+                        state <= S_MUL;
                     end
                 end
 
                 S_MUL: begin
-                    // bit 15 of the multiplier has weight -2^15
-                    if (mplier[0])
-                        acc <= last ? (acc - mcand) : (acc + mcand);
-                    mcand  <= mcand <<< 1;
-                    mplier <= mplier >> 1;
-                    cnt    <= cnt - 5'd1;
-                    if (last) state <= S_RED;
+                    acc <= {sum[16], sum[16:1]};    // arithmetic shift right
+                    qr  <= {sum[0], qr[15:1]};      // sum's LSB becomes the product's next bit
+                    cnt <= cnt - 5'd1;
+                    if (last) state <= S_RED1;
                 end
 
-                default: begin      // S_RED
+                S_RED1: begin
+                    m     <= m_full[15:0];
+                    state <= S_RED2;
+                end
+
+                default: begin      // S_RED2
                     c     <= t_nxt;
                     done  <= 1'b1;
                     state <= S_IDLE;
