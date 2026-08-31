@@ -1,17 +1,24 @@
-# Tests for the NTT butterfly accelerator
+# Tests for the ML-KEM NTT/INTT accelerator
 
-All tests use [cocotb](https://docs.cocotb.org/en/stable/) with Icarus Verilog.
+All tests use [cocotb](https://docs.cocotb.org/en/stable/) with Icarus Verilog, and check against
+`ntt_golden.py` — a bit-exact model of the hardware whose constants are verified against the reference
+Kyber tables (`zetas` starting `-1044, -758, -359, -1517`, `QINV = -3327`, `v = 20159`, `f = 1441`).
 
 | Command | What it covers |
 | ------- | -------------- |
-| `make` | **The hardened design.** Drives `tt_um_ntt` through the Tiny Tapeout pins only: directed and random butterflies, a complete 256-point ML-KEM forward NTT, and the `uio_oe` direction map. |
-| `make -f Makefile_bf` | The pipelined `butterfly` on its own: back-to-back at one per clock, a randomly gapped stream, and a reset mid-flight. |
-| `make -f Makefile_rom` | All 127 twiddle ROM entries plus the default. |
-| `make -f Makefile_top` | The **reference** `ntt_top` sequencer (on-chip coefficient array) against `ntt_golden.py`. Not part of the taped-out design — see the header in `src/ntt_top.v`. |
+| `make` | **The hardened design.** Drives `tt_um_ntt` through the TT pins only: all five modes, the twiddle ROM, a complete 256-point forward NTT, and an NTT→INTT round trip that recovers the original polynomial. |
+| `make -f Makefile_bfu` | The five-mode arithmetic core: each mode alone, a mixed-mode stream at full rate (results must not reorder), a randomly gapped stream, and `FQMUL(x,1) == montgomery_reduce(x)`. |
+| `make -f Makefile_arith` | `fqmul` and `montgomery_reduce` over random and edge-case operands. |
+| `make -f Makefile_barrett` | `barrett_reduce`: congruent mod q and correctly centred. |
+| `make -f Makefile_rom` | All 128 Montgomery-form twiddle entries. |
 
-The most important one is `make`: `test_full_ntt_through_pins` sequences all 896 butterflies of a real
-ML-KEM forward NTT across the chip's pins exactly the way the host FPGA will, then checks all 256 output
-coefficients against the golden model in `ntt_golden.py`.
+The most important is `make`. `test_ntt_intt_round_trip` plays the part of the host FPGA: it holds the
+256-coefficient polynomial in Python, walks the FIPS 203 address pattern, and streams all 896 forward
+butterflies, then all 896 inverse butterflies plus the 256-operation scaling pass, through the chip's pins.
+It checks that the round trip returns `f·R (mod q)` per Eq (10.4), and that one `montgomery_reduce` recovers
+the original coefficients exactly.
+
+`python ntt_golden.py` runs the model's own self-tests standalone.
 
 ## Gate-level simulation
 
@@ -27,15 +34,14 @@ and the post-layout netlist.
 
 ## Waveforms
 
-`make` writes `tb.fst`. View it with:
+`make` writes `tb.fst`:
 
 ```sh
 gtkwave tb.fst tb.gtkw     # or: surfer tb.fst
 ```
 
-For a waveform of the butterfly alone, without cocotb:
+## Regenerating the twiddle ROM
 
 ```sh
-iverilog -g2012 -o sim_bf tb_butterfly.v ../src/butterfly.v \
-         ../src/mod_mult.v ../src/mod_add.v ../src/mod_sub.v && vvp sim_bf
+python scripts/generate_twiddle.py > src/twiddle_rom.v
 ```

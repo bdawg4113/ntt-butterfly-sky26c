@@ -1,0 +1,8 @@
+# Makefile_arith -- the Montgomery multiply kernel
+SIM ?= icarus
+TOPLEVEL_LANG ?= verilog
+SRC_DIR = $(PWD)/../src
+VERILOG_SOURCES = $(SRC_DIR)/fqmul.v $(SRC_DIR)/montgomery_reduce.v
+TOPLEVEL = fqmul
+COCOTB_TEST_MODULES = test_arith
+include $(shell cocotb-config --makefiles)/Makefile.sim

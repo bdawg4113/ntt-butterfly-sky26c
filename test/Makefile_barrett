@@ -1,0 +1,8 @@
+# Makefile_barrett -- the Barrett reduction kernel
+SIM ?= icarus
+TOPLEVEL_LANG ?= verilog
+SRC_DIR = $(PWD)/../src
+VERILOG_SOURCES = $(SRC_DIR)/barrett_reduce.v
+TOPLEVEL = barrett_reduce
+COCOTB_TEST_MODULES = test_barrett
+include $(shell cocotb-config --makefiles)/Makefile.sim

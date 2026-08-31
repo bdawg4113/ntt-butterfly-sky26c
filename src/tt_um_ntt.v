@@ -1,12 +1,18 @@
 /*
- * tt_um_ntt.v -- Tiny Tapeout wrapper for the ML-KEM NTT butterfly co-processor.
+ * tt_um_ntt.v -- Tiny Tapeout wrapper for the ML-KEM-512 NTT/INTT accelerator.
+ *
+ * The chip is the arithmetic engine of the transform. A host -- an Arty A7
+ * FPGA -- holds the 256-coefficient polynomial and walks the address pattern;
+ * this part performs the modular arithmetic each butterfly needs.
  *
  * Pin map:
- *   ui_in [7:0]  operand byte bus   (4-byte frame: a, b, twiddle index k)
- *   uio_in[0]    in_valid strobe
- *   uo_out[7:0]  result byte bus    (3-byte frame: a_out, b_out)
- *   uio_out[1]   out_valid strobe
- *   uio_out[2]   busy
+ *   ui_in [7:0]  write data byte
+ *   uio_in[2:0]  register address
+ *   uio_in[3]    write enable
+ *   uio_in[4]    start (rising edge launches one operation)
+ *   uo_out[7:0]  result byte
+ *   uio_out[5]   out_valid
+ *   uio_out[6]   busy
  *
  * SPDX-License-Identifier: Apache-2.0
  */
@@ -24,16 +30,21 @@ module tt_um_ntt (
     input  wire       rst_n     // reset_n - low to reset
 );
 
-    wire       in_valid  = uio_in[0];
+    wire [2:0] waddr = uio_in[2:0];
+    wire       we    = uio_in[3];
+    wire       start = uio_in[4];
+
     wire [7:0] out_byte;
     wire       out_valid;
     wire       busy;
 
-    bfu_stream u_bfu (
+    bfu_io u_bfu (
         .clk       (clk),
-        .rst       (~rst_n),    // the core uses active-high reset, TT supplies active-low
+        .rst       (~rst_n),   // the core uses active-high reset, TT supplies active-low
         .in_byte   (ui_in),
-        .in_valid  (in_valid),
+        .waddr     (waddr),
+        .we        (we),
+        .start     (start),
         .out_byte  (out_byte),
         .out_valid (out_valid),
         .busy      (busy)
@@ -41,13 +52,13 @@ module tt_um_ntt (
 
     assign uo_out = out_byte;
 
-    // uio[0] is the in_valid input; uio[1] and uio[2] are status outputs.
-    assign uio_out = {5'b00000, busy, out_valid, 1'b0};
-    assign uio_oe  = 8'b00000110;
+    // uio[2:0], uio[3], uio[4] are inputs; uio[5] and uio[6] are status outputs.
+    assign uio_out = {1'b0, busy, out_valid, 5'b00000};
+    assign uio_oe  = 8'b01100000;
 
     // Sink the inputs the design does not read: ena is tied high by the
-    // harness and uio_in[7:1] are spare.
-    wire _unused = &{ena, uio_in[7:1], 1'b0};
+    // harness, and uio_in[7:5] are spare.
+    wire _unused = &{ena, uio_in[7:5], 1'b0};
 
 endmodule
 

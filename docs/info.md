@@ -9,116 +9,149 @@ You can also include images in this folder and reference them in the markdown. E
 
 ## How it works
 
-This is a hardware accelerator for the inner loop of the **Number Theoretic Transform (NTT)** used by
-**ML-KEM** (FIPS 203, formerly Kyber). The NTT is what makes polynomial multiplication in ML-KEM fast, and
-its inner loop is the Cooley-Tukey *butterfly*, which the chip computes in the field GF(q) with **q = 3329**:
+This chip is the **modular arithmetic engine** of the Number Theoretic Transform used by **ML-KEM-512**
+(FIPS 203, formerly Kyber). It performs the forward transform's butterflies, the inverse transform's
+butterflies, and the modular multiply-and-reduce operations that the rest of a polynomial multiplication is
+built from.
+
+A host — an **Arty A7 FPGA** — holds the 256-coefficient polynomial and walks the address pattern. The chip
+does the arithmetic. That split is deliberate: the arithmetic is the expensive part, while the coefficient
+array as flip-flops would be over 8,000 registers, which is more silicon than the largest Tiny Tapeout tile.
+
+All values are **signed 16-bit** and centred; the modulus is **q = 3329** and the Montgomery radix is
+**R = 2^16**.
+
+### The two reduction kernels
+
+Every butterfly needs a multiply *and* a reduction mod q, and a hardware divider is out of the question. Two
+classic tricks replace the division with multiplies and shifts.
+
+**Montgomery reduction** takes a signed 32-bit product and returns `a·R⁻¹ mod q` with `|t| < q`:
 
 ```
-t     = zeta * b  mod q      (twiddle multiply)
-a_out = a + t     mod q      -> f[j]
-b_out = a - t     mod q      -> f[j+len]
+m = (a mod 2^16) · QINV        QINV = q^-1 mod 2^16 = -3327
+t = (a - m·q) >> 16            arithmetic shift
 ```
 
-A full 256-point forward NTT is 7 stages of 128 butterflies each, 896 in total. The chip computes the
-butterflies; the host walks the address pattern and holds the polynomial.
+`m` is chosen precisely so that `m·q` matches `a` in the low 16 bits, which makes the shift exact. That also
+means the subtraction cannot borrow out of those bits, so in hardware it collapses to a **16-bit** subtract
+of the two top halves — no 32-bit subtractor is needed.
 
-### The modular multiplier
-
-The hard part is `zeta * b mod q` without a divider. The design uses **Barrett reduction** with
-`k = 24` and `mu = floor(2^24 / q) = 5039`:
+**Barrett reduction** maps any signed 16-bit value into a centred range without changing it mod q:
 
 ```
-T   = a * b                  (< 3329^2, fits in 24 bits)
-quo = (T * mu) >> 24         (quotient estimate)
-r   = T - quo*q
-c   = (r >= q) ? r - q : r   (a single conditional subtraction)
+v = floor((2^26 + q/2) / q) = 20159
+t = floor((v·a + 2^25) / 2^26)
+c = a - t·q
 ```
 
-That a *single* conditional subtraction is enough was checked exhaustively over all 11,075,585 possible
-products: the largest `r` that occurs is **4903**, which is below `2q = 6658`. It also stays under 8192,
-so the subtraction can be evaluated in 13 bits without losing a live bit.
+The workhorse multiply is `fqmul(a,b) = montgomery_reduce(a·b)` — one 16×16 product into one Montgomery
+reduction. The **twiddle ROM is stored pre-multiplied by R**, so a butterfly multiply
+`fqmul(ζ·R, x) = ζ·R·x·R⁻¹ = ζ·x` lands with no stray Montgomery factor. That table is bit-identical to the
+reference Kyber `zetas` array, beginning `-1044, -758, -359, -1517, …`.
+
+### The two butterflies
+
+```
+Cooley-Tukey (forward)            Gentleman-Sande (inverse)
+  t     = fqmul(ζ, b)               a_out = barrett(a + b)
+  a_out = a + t                     b_out = fqmul(ζ, b - a)
+  b_out = a - t
+  multiply then add/sub             add/sub then multiply
+```
+
+These are the same primitive sequenced differently, which is why one arithmetic core serves both transforms.
+The forward transform walks the twiddle index **up** from 1; the inverse walks it **down** from 127.
 
 ### Why it is pipelined
 
-Written combinationally, that multiplier chains **three** multipliers back to back (`a*b`, then `T*mu`,
-then `quo*q`) and measures **92 logic levels** — far too deep to close timing. Each multiply now gets its
-own pipeline stage, cutting the critical path to about **50 levels**:
+Both kernels chain multipliers, and a combinational version cannot close timing. `fqmul` is split into three
+pipeline stages — one per multiply — and `barrett_reduce` into two. The core has a **uniform 5-clock
+latency in every mode**, so results never reorder when the host switches operation mid-stream, and it accepts
+a new operation every clock.
 
-| Stage | Work | Levels |
-| ----- | ---- | ------ |
-| 1 | `T = a * b` | 45 |
-| 2 | `quo = (T * mu) >> 24` | 53 |
-| 3 | `r = T - quo*q`, conditional subtract | 36 |
-| 4 | `mod_add` / `mod_sub` | 32 |
+### Operating modes
 
-The result is a **4-cycle latency, one-butterfly-per-clock** datapath. `a` bypasses the multiplier, so it
-is delayed through a 3-deep shift register to meet `t` at the adder stage.
+`ctrl[2:0]` selects the operation:
 
-The twiddle factors live in an on-chip ROM (all 127 values of `zeta^bitrev7(k) mod q`), so the host sends a
-7-bit index rather than a 12-bit constant — which is what lets an operand set fit in 4 bytes instead of 5.
+| mode | name | `a_out` | `b_out` | used for |
+| ---- | ---- | ------- | ------- | -------- |
+| 000 | CT | `a + fqmul(ζ,b)` | `a - fqmul(ζ,b)` | forward NTT |
+| 001 | GS | `barrett(a + b)` | `fqmul(ζ, b - a)` | inverse NTT |
+| 010 | FQMUL | `fqmul(a, b)` | same | scaling, basemul |
+| 011 | BARRETT | `barrett(a)` | same | range control |
+| 100 | ADD | `a + b` | `a - b` | polynomial add/sub |
+
+`FQMUL` with `b = 1` is a bare `montgomery_reduce`, which is how the host strips the residual Montgomery
+factor after a round trip.
 
 ## How to test
 
-Tiny Tapeout's 8-bit ports are too narrow for a butterfly's operands, so operands arrive as a **4-byte
-frame** and results leave as a **3-byte frame**, one byte per clock.
+Operands are 48 bits wide (`a`, `b`, `ζ`) and results 32 bits, both far wider than the pin budget, so the
+host assembles operands by **addressed byte writes**, pulses `start`, then shifts the result back out.
 
-### Sending an operand set
+### Writing operands
 
-Put each byte on `ui_in[7:0]` and raise `uio_in[0]` (`in_valid`) for that clock:
+Put a byte on `ui_in[7:0]`, its register number on `uio_in[2:0]`, and raise `uio_in[3]` (`we`):
 
-| Byte | `ui_in[7:0]` |
-| ---- | ------------ |
-| 0 | `a[7:0]` |
-| 1 | `b[3:0]`, `a[11:8]` |
-| 2 | `b[11:4]` |
-| 3 | `0`, `k[6:0]` (twiddle index, 1..127) |
+| addr | register | | addr | register |
+| ---- | -------- | - | ---- | -------- |
+| 0 | `a[7:0]` | | 4 | `zeta[7:0]` |
+| 1 | `a[15:8]` | | 5 | `zeta[15:8]` |
+| 2 | `b[7:0]` | | 6 | `ctrl` |
+| 3 | `b[15:8]` | | 7 | reserved |
 
-The 4th byte completes the frame and starts the butterfly.
+`ctrl = {4'b0, zeta_from_rom, mode[2:0]}`. Registers persist between operations, so a host walking one NTT
+layer only rewrites the bytes that actually changed.
 
-### Receiving a result
+**`ctrl` bit 3 selects the twiddle source.** Cleared, the core uses the 16-bit `zeta` the host wrote — which
+is what `basemul` needs, since its twiddles are the signed pair `±zetas[64+i]`. Set, the core looks up
+`zetas[zeta[6:0]]` in the on-chip ROM, so a transform only sends a 7-bit index.
 
-Four clocks later the result appears on `uo_out[7:0]`, one byte per clock, each qualified by
-`uio_out[1]` (`out_valid`):
+### Executing and reading back
 
-| Byte | `uo_out[7:0]` |
-| ---- | ------------- |
-| 0 | `a_out[7:0]` |
-| 1 | `b_out[3:0]`, `a_out[11:8]` |
-| 2 | `b_out[11:4]` |
+A rising edge on `uio_in[4]` (`start`) latches the operands. Five clocks later four result bytes appear on
+`uo_out[7:0]`, each qualified by `uio_out[5]` (`out_valid`), low byte first:
 
-`uio_out[2]` (`busy`) is high while a butterfly is in flight or a result is being emitted.
+```
+a_out[7:0]   a_out[15:8]   b_out[7:0]   b_out[15:8]
+```
 
-### Flow control
+`uio_out[6]` (`busy`) is high from launch until the last result byte has been presented, so the host can poll
+rather than count clocks.
 
-None is needed. The input bus carries at most one byte per clock, so a butterfly can be issued at most
-once every 4 clocks; a result takes 3 clocks to emit and therefore always finishes before the next one
-arrives. Just stream bytes in and latch bytes out.
+### Running a transform
 
-At 50 MHz this is one butterfly every 80 ns, so a complete 256-point forward NTT (896 butterflies) takes
-roughly **72 microseconds**, host sequencing aside.
+A full forward NTT is 7 layers of 128 Cooley-Tukey butterflies — **896 operations**, the host supplying the
+twiddle index per block. The inverse is 896 Gentleman-Sande butterflies with the index walking down, followed
+by a 256-operation scaling pass by `f = R²/128 mod q = 1441` in `FQMUL` mode.
 
-### Running the tests
+The round trip leaves one extra Montgomery factor: `INTT(NTT(f)) ≡ f·R (mod q)`. One `FQMUL(x, 1)` per
+coefficient removes it.
+
+Polynomial multiplication is `INTT(basemul(NTT(a), NTT(b)))`. Each `basemul` is five `fqmul`s and two adds
+over a pair of degree-1 polynomials mod `x² - ζ`, which the host composes from `FQMUL` and `ADD` operations.
+
+### The tests
 
 ```sh
 cd test
-make            # wrapper tests through the pins, incl. a full 256-point NTT
-make -f Makefile_bf    # the pipelined butterfly on its own
-make -f Makefile_rom   # every entry of the twiddle ROM
-make -f Makefile_top   # reference NTT sequencer vs the Python golden model
+make                      # pin-level: all modes, a full NTT, and an NTT->INTT round trip
+make -f Makefile_bfu      # the five-mode arithmetic core
+make -f Makefile_arith    # fqmul / montgomery_reduce
+make -f Makefile_barrett  # barrett_reduce
+make -f Makefile_rom      # all 128 Montgomery-form twiddles
 ```
 
-`test/test.py` drives a complete ML-KEM forward NTT through the pins exactly the way an external host
-would, and checks all 256 output coefficients against `test/ntt_golden.py`.
+`test.py` plays the part of the host FPGA: it holds the polynomial in Python, walks the FIPS 203 address
+pattern, and streams every butterfly through the chip's pins — then checks all 256 coefficients against
+`ntt_golden.py`, a bit-exact model whose constants are verified against the reference Kyber tables.
 
 ## External hardware
 
-None is required to use the chip, but it is designed to be driven by an **FPGA or MCU** that holds the
-256-coefficient polynomial and walks the NTT address pattern — for this project, an **Arty A7-100T**.
+An **FPGA or MCU** to hold the polynomial and drive the transform — for this project an **Arty A7-100T**.
 
-The host needs to do three things per butterfly: read `f[j]` and `f[j+len]`, send the 4-byte frame with
-the stage's twiddle index `k`, and write the 3-byte result back to the same two addresses. The address
-walk it must follow is the standard FIPS 203 Algorithm 9 loop, and a working reference implementation of
-exactly that sequencing is in `test/test.py` (`test_full_ntt_through_pins`).
-
-The coefficient array deliberately lives off-chip: as flip-flops a 256x12 array synthesises to over 6000
-registers, which is more silicon than the largest Tiny Tapeout tile provides.
+Per butterfly the host reads `r[j]` and `r[j+len]`, writes the operand bytes that changed, pulses `start`,
+and writes the two result halves back to the same addresses. The address walk is the standard FIPS 203
+Algorithm 9 (forward) and Algorithm 10 (inverse) loop; a working reference implementation of exactly that
+sequencing is in `test/test.py`.
