@@ -1,8 +1,8 @@
 Copyright 1986-2022 Xilinx, Inc. All Rights Reserved. Copyright 2022-2023 Advanced Micro Devices, Inc. All Rights Reserved.
 --------------------------------------------------------------------------------------------------------------------------------------------------------------
 | Tool Version : Vivado v.2023.2 (lin64) Build 4029153 Fri Oct 13 20:13:54 MDT 2023
-| Date         : Wed Aug 26 16:24:13 2026
-| Host         : coder-mboudames-tt26 running 64-bit Ubuntu 24.04.4 LTS
+| Date         : Mon Aug 31 20:11:45 2026
+| Host         : carson-matthers-ThinkPad running 64-bit Ubuntu 24.04.4 LTS
 | Command      : report_methodology -file arty_top_methodology_drc_routed.rpt -pb arty_top_methodology_drc_routed.pb -rpx arty_top_methodology_drc_routed.rpx
 | Design       : arty_top
 | Device       : xc7a100tcsg324-1

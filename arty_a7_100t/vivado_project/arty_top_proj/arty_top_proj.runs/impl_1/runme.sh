@@ -8,9 +8,9 @@
 # 
 
 if [ -z "$PATH" ]; then
-  PATH=/tools/Xilinx/Vitis/2023.2/bin:/tools/Xilinx/Vivado/2023.2/ids_lite/ISE/bin/lin64:/tools/Xilinx/Vivado/2023.2/bin
+  PATH=/mnt/vivado_ssd/xilinx/Vivado/2023.2/ids_lite/ISE/bin/lin64:/mnt/vivado_ssd/xilinx/Vivado/2023.2/bin
 else
-  PATH=/tools/Xilinx/Vitis/2023.2/bin:/tools/Xilinx/Vivado/2023.2/ids_lite/ISE/bin/lin64:/tools/Xilinx/Vivado/2023.2/bin:$PATH
+  PATH=/mnt/vivado_ssd/xilinx/Vivado/2023.2/ids_lite/ISE/bin/lin64:/mnt/vivado_ssd/xilinx/Vivado/2023.2/bin:$PATH
 fi
 export PATH
 
@@ -21,7 +21,7 @@ else
 fi
 export LD_LIBRARY_PATH
 
-HD_PWD='/home/coder/ntt-butterfly-sky26c/arty_a7_100t/vivado_project/arty_top_proj/arty_top_proj.runs/impl_1'
+HD_PWD='/home/carson_dawg01/projects/ml_kem/ntt-butterfly-sky26c/arty_a7_100t/vivado_project/arty_top_proj/arty_top_proj.runs/impl_1'
 cd "$HD_PWD"
 
 HD_LOG=runme.log
