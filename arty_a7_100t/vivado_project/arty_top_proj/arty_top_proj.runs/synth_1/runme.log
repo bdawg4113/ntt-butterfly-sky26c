@@ -1,0 +1,483 @@
+
+*** Running vivado
+    with args -log arty_top.vds -m64 -product Vivado -mode batch -messageDb vivado.pb -notrace -source arty_top.tcl
+
+
+****** Vivado v2023.2 (64-bit)
+  **** SW Build 4029153 on Fri Oct 13 20:13:54 MDT 2023
+  **** IP Build 4028589 on Sat Oct 14 00:45:43 MDT 2023
+  **** SharedData Build 4025554 on Tue Oct 10 17:18:54 MDT 2023
+    ** Copyright 1986-2022 Xilinx, Inc. All Rights Reserved.
+    ** Copyright 2022-2023 Advanced Micro Devices, Inc. All Rights Reserved.
+
+source arty_top.tcl -notrace
+create_project: Time (s): cpu = 00:00:07 ; elapsed = 00:00:07 . Memory (MB): peak = 1350.477 ; gain = 37.840 ; free physical = 258982 ; free virtual = 634586
+Command: synth_design -top arty_top -part xc7a100tcsg324-1
+Starting synth_design
+Attempting to get a license for feature 'Synthesis' and/or device 'xc7a100t'
+INFO: [Common 17-349] Got license for feature 'Synthesis' and/or device 'xc7a100t'
+INFO: [Device 21-403] Loading part xc7a100tcsg324-1
+INFO: [Synth 8-7079] Multithreading enabled for synth_design using a maximum of 4 processes.
+INFO: [Synth 8-7078] Launching helper process for spawning children vivado processes
+INFO: [Synth 8-7075] Helper process launched with PID 3404664
+---------------------------------------------------------------------------------
+Starting RTL Elaboration : Time (s): cpu = 00:00:04 ; elapsed = 00:00:04 . Memory (MB): peak = 2104.406 ; gain = 403.684 ; free physical = 266902 ; free virtual = 642584
+---------------------------------------------------------------------------------
+INFO: [Synth 8-6157] synthesizing module 'arty_top' [/home/coder/ntt-butterfly-sky26c/src/arty_top.v:32]
+INFO: [Synth 8-6157] synthesizing module 'debounce_pulse' [/home/coder/ntt-butterfly-sky26c/src/debounce_pulse.v:17]
+	Parameter STABLE_CYCLES bound to: 1000000 - type: integer 
+INFO: [Synth 8-6155] done synthesizing module 'debounce_pulse' (0#1) [/home/coder/ntt-butterfly-sky26c/src/debounce_pulse.v:17]
+INFO: [Synth 8-6157] synthesizing module 'demo_top' [/home/coder/ntt-butterfly-sky26c/src/demo_top.v:28]
+INFO: [Synth 8-6157] synthesizing module 'coeff_mem' [/home/coder/ntt-butterfly-sky26c/src/coeff_mem.v:30]
+INFO: [Synth 8-6155] done synthesizing module 'coeff_mem' (0#1) [/home/coder/ntt-butterfly-sky26c/src/coeff_mem.v:30]
+INFO: [Synth 8-6157] synthesizing module 'control_fsm' [/home/coder/ntt-butterfly-sky26c/src/control_fsm.v:33]
+INFO: [Synth 8-6155] done synthesizing module 'control_fsm' (0#1) [/home/coder/ntt-butterfly-sky26c/src/control_fsm.v:33]
+INFO: [Synth 8-6157] synthesizing module 'twiddle_rom' [/home/coder/ntt-butterfly-sky26c/src/twiddle_rom.v:1]
+INFO: [Synth 8-6155] done synthesizing module 'twiddle_rom' (0#1) [/home/coder/ntt-butterfly-sky26c/src/twiddle_rom.v:1]
+INFO: [Synth 8-6157] synthesizing module 'butterfly' [/home/coder/ntt-butterfly-sky26c/src/butterfly.v:20]
+INFO: [Synth 8-6157] synthesizing module 'mod_mult' [/home/coder/ntt-butterfly-sky26c/src/mod_mult.v:22]
+INFO: [Synth 8-6155] done synthesizing module 'mod_mult' (0#1) [/home/coder/ntt-butterfly-sky26c/src/mod_mult.v:22]
+INFO: [Synth 8-6157] synthesizing module 'mod_add' [/home/coder/ntt-butterfly-sky26c/src/mod_add.v:6]
+INFO: [Synth 8-6155] done synthesizing module 'mod_add' (0#1) [/home/coder/ntt-butterfly-sky26c/src/mod_add.v:6]
+INFO: [Synth 8-6157] synthesizing module 'mod_sub' [/home/coder/ntt-butterfly-sky26c/src/mod_sub.v:8]
+INFO: [Synth 8-6155] done synthesizing module 'mod_sub' (0#1) [/home/coder/ntt-butterfly-sky26c/src/mod_sub.v:8]
+INFO: [Synth 8-6155] done synthesizing module 'butterfly' (0#1) [/home/coder/ntt-butterfly-sky26c/src/butterfly.v:20]
+INFO: [Synth 8-6157] synthesizing module 'intt_control_fsm' [/home/coder/ntt-butterfly-sky26c/src/intt_control_fsm.v:27]
+INFO: [Synth 8-226] default block is never used [/home/coder/ntt-butterfly-sky26c/src/intt_control_fsm.v:83]
+INFO: [Synth 8-6155] done synthesizing module 'intt_control_fsm' (0#1) [/home/coder/ntt-butterfly-sky26c/src/intt_control_fsm.v:27]
+INFO: [Synth 8-6157] synthesizing module 'intt_butterfly' [/home/coder/ntt-butterfly-sky26c/src/intt_butterfly.v:14]
+INFO: [Synth 8-6155] done synthesizing module 'intt_butterfly' (0#1) [/home/coder/ntt-butterfly-sky26c/src/intt_butterfly.v:14]
+WARNING: [Synth 8-589] replacing case/wildcard equality operator !== with logical equality operator != [/home/coder/ntt-butterfly-sky26c/src/demo_top.v:272]
+INFO: [Synth 8-6155] done synthesizing module 'demo_top' (0#1) [/home/coder/ntt-butterfly-sky26c/src/demo_top.v:28]
+INFO: [Synth 8-6157] synthesizing module 'pulse_stretch' [/home/coder/ntt-butterfly-sky26c/src/pulse_stretch.v:11]
+	Parameter STRETCH_CYCLES bound to: 25000000 - type: integer 
+INFO: [Synth 8-6155] done synthesizing module 'pulse_stretch' (0#1) [/home/coder/ntt-butterfly-sky26c/src/pulse_stretch.v:11]
+INFO: [Synth 8-6155] done synthesizing module 'arty_top' (0#1) [/home/coder/ntt-butterfly-sky26c/src/arty_top.v:32]
+---------------------------------------------------------------------------------
+Finished RTL Elaboration : Time (s): cpu = 00:00:06 ; elapsed = 00:00:06 . Memory (MB): peak = 2192.375 ; gain = 491.652 ; free physical = 267002 ; free virtual = 642703
+---------------------------------------------------------------------------------
+---------------------------------------------------------------------------------
+Start Handling Custom Attributes
+---------------------------------------------------------------------------------
+---------------------------------------------------------------------------------
+Finished Handling Custom Attributes : Time (s): cpu = 00:00:06 ; elapsed = 00:00:06 . Memory (MB): peak = 2210.188 ; gain = 509.465 ; free physical = 266996 ; free virtual = 642698
+---------------------------------------------------------------------------------
+---------------------------------------------------------------------------------
+Finished RTL Optimization Phase 1 : Time (s): cpu = 00:00:06 ; elapsed = 00:00:06 . Memory (MB): peak = 2210.188 ; gain = 509.465 ; free physical = 266996 ; free virtual = 642698
+---------------------------------------------------------------------------------
+Netlist sorting complete. Time (s): cpu = 00:00:00.01 ; elapsed = 00:00:00.01 . Memory (MB): peak = 2210.188 ; gain = 0.000 ; free physical = 266997 ; free virtual = 642700
+INFO: [Project 1-570] Preparing netlist for logic optimization
+
+Processing XDC Constraints
+Initializing timing engine
+Parsing XDC File [/home/coder/ntt-butterfly-sky26c/arty_a7_100t/constraints/arty_a7_100t.xdc]
+Finished Parsing XDC File [/home/coder/ntt-butterfly-sky26c/arty_a7_100t/constraints/arty_a7_100t.xdc]
+INFO: [Project 1-236] Implementation specific constraints were found while reading constraint file [/home/coder/ntt-butterfly-sky26c/arty_a7_100t/constraints/arty_a7_100t.xdc]. These constraints will be ignored for synthesis but will be used in implementation. Impacted constraints are listed in the file [.Xil/arty_top_propImpl.xdc].
+Resolution: To avoid this warning, move constraints listed in [.Xil/arty_top_propImpl.xdc] to another XDC file and exclude this new file from synthesis with the used_in_synthesis property (File Properties dialog in GUI) and re-run elaboration/synthesis.
+Completed Processing XDC Constraints
+
+Netlist sorting complete. Time (s): cpu = 00:00:00 ; elapsed = 00:00:00 . Memory (MB): peak = 2357.938 ; gain = 0.000 ; free physical = 267003 ; free virtual = 642720
+INFO: [Project 1-111] Unisim Transformation Summary:
+No Unisim elements were transformed.
+
+Constraint Validation Runtime : Time (s): cpu = 00:00:00 ; elapsed = 00:00:00 . Memory (MB): peak = 2357.973 ; gain = 0.000 ; free physical = 266936 ; free virtual = 642653
+---------------------------------------------------------------------------------
+Finished Constraint Validation : Time (s): cpu = 00:00:13 ; elapsed = 00:00:13 . Memory (MB): peak = 2357.973 ; gain = 657.250 ; free physical = 266050 ; free virtual = 641568
+---------------------------------------------------------------------------------
+---------------------------------------------------------------------------------
+Start Loading Part and Timing Information
+---------------------------------------------------------------------------------
+Loading part: xc7a100tcsg324-1
+---------------------------------------------------------------------------------
+Finished Loading Part and Timing Information : Time (s): cpu = 00:00:13 ; elapsed = 00:00:13 . Memory (MB): peak = 2357.973 ; gain = 657.250 ; free physical = 266037 ; free virtual = 641555
+---------------------------------------------------------------------------------
+---------------------------------------------------------------------------------
+Start Applying 'set_property' XDC Constraints
+---------------------------------------------------------------------------------
+---------------------------------------------------------------------------------
+Finished applying 'set_property' XDC Constraints : Time (s): cpu = 00:00:13 ; elapsed = 00:00:13 . Memory (MB): peak = 2357.973 ; gain = 657.250 ; free physical = 265955 ; free virtual = 641473
+---------------------------------------------------------------------------------
+INFO: [Synth 8-802] inferred FSM for state register 'state_reg' in module 'control_fsm'
+INFO: [Synth 8-802] inferred FSM for state register 'state_reg' in module 'intt_control_fsm'
+INFO: [Synth 8-802] inferred FSM for state register 'state_reg' in module 'demo_top'
+INFO: [Synth 8-3971] The signal "coeff_mem:/mem_reg" was recognized as a true dual port RAM template.
+---------------------------------------------------------------------------------------------------
+                   State |                     New Encoding |                Previous Encoding 
+---------------------------------------------------------------------------------------------------
+                  S_IDLE |                              001 |                               00
+                   S_RUN |                              010 |                               01
+                  S_DONE |                              100 |                               10
+---------------------------------------------------------------------------------------------------
+INFO: [Synth 8-3354] encoded FSM with state register 'state_reg' using encoding 'one-hot' in module 'control_fsm'
+---------------------------------------------------------------------------------------------------
+                   State |                     New Encoding |                Previous Encoding 
+---------------------------------------------------------------------------------------------------
+                  S_IDLE |                               01 |                               00
+                  S_BFLY |                               11 |                               01
+                 S_SCALE |                               10 |                               10
+                  S_DONE |                               00 |                               11
+---------------------------------------------------------------------------------------------------
+INFO: [Synth 8-3354] encoded FSM with state register 'state_reg' using encoding 'sequential' in module 'intt_control_fsm'
+---------------------------------------------------------------------------------------------------
+                   State |                     New Encoding |                Previous Encoding 
+---------------------------------------------------------------------------------------------------
+                  S_IDLE |                           000001 |                              000
+                  S_LOAD |                           000010 |                              001
+               S_RUN_NTT |                           000100 |                              010
+              S_RUN_INTT |                           001000 |                              011
+               S_COMPARE |                           010000 |                              100
+                  S_DONE |                           100000 |                              101
+---------------------------------------------------------------------------------------------------
+INFO: [Synth 8-3354] encoded FSM with state register 'state_reg' using encoding 'one-hot' in module 'demo_top'
+---------------------------------------------------------------------------------
+Finished RTL Optimization Phase 2 : Time (s): cpu = 00:00:13 ; elapsed = 00:00:14 . Memory (MB): peak = 2357.973 ; gain = 657.250 ; free physical = 265832 ; free virtual = 641353
+---------------------------------------------------------------------------------
+---------------------------------------------------------------------------------
+Start RTL Component Statistics 
+---------------------------------------------------------------------------------
+Detailed RTL Component Info : 
++---Adders : 
+	   2 Input   25 Bit       Adders := 1     
+	   2 Input   13 Bit       Adders := 3     
+	   3 Input   13 Bit       Adders := 2     
+	   2 Input   12 Bit       Adders := 9     
+	   2 Input    9 Bit       Adders := 2     
+	   2 Input    8 Bit       Adders := 13    
+	   2 Input    7 Bit       Adders := 2     
+	   2 Input    3 Bit       Adders := 5     
++---Registers : 
+	               25 Bit    Registers := 1     
+	               13 Bit    Registers := 4     
+	               12 Bit    Registers := 10    
+	                8 Bit    Registers := 8     
+	                7 Bit    Registers := 2     
+	                3 Bit    Registers := 5     
+	                1 Bit    Registers := 14    
++---RAMs : 
+	               3K Bit	(256 X 12 bit)          RAMs := 2     
++---Muxes : 
+	   2 Input   25 Bit        Muxes := 1     
+	   2 Input   24 Bit        Muxes := 1     
+	   2 Input   12 Bit        Muxes := 13    
+	   4 Input   12 Bit        Muxes := 1     
+	   2 Input    8 Bit        Muxes := 7     
+	   3 Input    8 Bit        Muxes := 3     
+	   4 Input    8 Bit        Muxes := 4     
+	   6 Input    8 Bit        Muxes := 2     
+	   3 Input    7 Bit        Muxes := 1     
+	   4 Input    7 Bit        Muxes := 1     
+	   2 Input    3 Bit        Muxes := 2     
+	   3 Input    3 Bit        Muxes := 2     
+	   4 Input    3 Bit        Muxes := 2     
+	   6 Input    3 Bit        Muxes := 2     
+	   4 Input    2 Bit        Muxes := 1     
+	   2 Input    1 Bit        Muxes := 19    
+	   3 Input    1 Bit        Muxes := 5     
+	   4 Input    1 Bit        Muxes := 7     
+	   6 Input    1 Bit        Muxes := 8     
+---------------------------------------------------------------------------------
+Finished RTL Component Statistics 
+---------------------------------------------------------------------------------
+---------------------------------------------------------------------------------
+Start Part Resource Summary
+---------------------------------------------------------------------------------
+Part Resources:
+DSPs: 240 (col length:80)
+BRAMs: 270 (col length: RAMB18 80 RAMB36 40)
+---------------------------------------------------------------------------------
+Finished Part Resource Summary
+---------------------------------------------------------------------------------
+---------------------------------------------------------------------------------
+Start Cross Boundary and Area Optimization
+---------------------------------------------------------------------------------
+WARNING: [Synth 8-7080] Parallel synthesis criteria is not met
+DSP Report: Generating DSP u_demo/u_load_mul/T_r_reg, operation Mode is: ((A:0x11)'*B2)'.
+DSP Report: register u_demo/u_load_mul/a_r_reg is absorbed into DSP u_demo/u_load_mul/T_r_reg.
+DSP Report: register u_demo/u_load_mul/b_r_reg is absorbed into DSP u_demo/u_load_mul/T_r_reg.
+DSP Report: register u_demo/u_load_mul/T_r_reg is absorbed into DSP u_demo/u_load_mul/T_r_reg.
+DSP Report: operator u_demo/u_load_mul/T_r0 is absorbed into DSP u_demo/u_load_mul/T_r_reg.
+DSP Report: Generating DSP u_demo/u_load_mul/T_mu_r_reg, operation Mode is: (A*(B:0x13af))'.
+DSP Report: register u_demo/u_load_mul/T_mu_r_reg is absorbed into DSP u_demo/u_load_mul/T_mu_r_reg.
+DSP Report: operator u_demo/u_load_mul/T_mu_r0 is absorbed into DSP u_demo/u_load_mul/T_mu_r_reg.
+DSP Report: Generating DSP u_demo/u_load_mul/r_r_reg, operation Mode is: C'-A*(B:0xd01).
+DSP Report: register u_demo/u_load_mul/T_lo_r_reg is absorbed into DSP u_demo/u_load_mul/r_r_reg.
+DSP Report: register u_demo/u_load_mul/r_r_reg is absorbed into DSP u_demo/u_load_mul/r_r_reg.
+DSP Report: operator u_demo/u_load_mul/r_r0 is absorbed into DSP u_demo/u_load_mul/r_r_reg.
+DSP Report: operator u_demo/u_load_mul/quo_q is absorbed into DSP u_demo/u_load_mul/r_r_reg.
+DSP Report: Generating DSP u_demo/u_fwd_bf/u_mult/T_r_reg, operation Mode is: (A2*B2)'.
+DSP Report: register u_demo/u_fwd_bf/u_mult/b_r_reg is absorbed into DSP u_demo/u_fwd_bf/u_mult/T_r_reg.
+DSP Report: register u_demo/u_fwd_bf/u_mult/a_r_reg is absorbed into DSP u_demo/u_fwd_bf/u_mult/T_r_reg.
+DSP Report: register u_demo/u_fwd_bf/u_mult/T_r_reg is absorbed into DSP u_demo/u_fwd_bf/u_mult/T_r_reg.
+DSP Report: operator u_demo/u_fwd_bf/u_mult/T_r0 is absorbed into DSP u_demo/u_fwd_bf/u_mult/T_r_reg.
+DSP Report: Generating DSP u_demo/u_fwd_bf/u_mult/T_mu_r_reg, operation Mode is: (A*(B:0x13af))'.
+DSP Report: register u_demo/u_fwd_bf/u_mult/T_mu_r_reg is absorbed into DSP u_demo/u_fwd_bf/u_mult/T_mu_r_reg.
+DSP Report: operator u_demo/u_fwd_bf/u_mult/T_mu_r0 is absorbed into DSP u_demo/u_fwd_bf/u_mult/T_mu_r_reg.
+DSP Report: Generating DSP u_demo/u_fwd_bf/u_mult/r_r_reg, operation Mode is: C'-A*(B:0xd01).
+DSP Report: register u_demo/u_fwd_bf/u_mult/T_lo_r_reg is absorbed into DSP u_demo/u_fwd_bf/u_mult/r_r_reg.
+DSP Report: register u_demo/u_fwd_bf/u_mult/r_r_reg is absorbed into DSP u_demo/u_fwd_bf/u_mult/r_r_reg.
+DSP Report: operator u_demo/u_fwd_bf/u_mult/r_r0 is absorbed into DSP u_demo/u_fwd_bf/u_mult/r_r_reg.
+DSP Report: operator u_demo/u_fwd_bf/u_mult/quo_q is absorbed into DSP u_demo/u_fwd_bf/u_mult/r_r_reg.
+DSP Report: Generating DSP u_demo/u_inv_bf/u_mult/T_r_reg, operation Mode is: (A2*B2)'.
+DSP Report: register u_demo/u_inv_bf/u_mult/b_r_reg is absorbed into DSP u_demo/u_inv_bf/u_mult/T_r_reg.
+DSP Report: register u_demo/u_inv_bf/u_mult/a_r_reg is absorbed into DSP u_demo/u_inv_bf/u_mult/T_r_reg.
+DSP Report: register u_demo/u_inv_bf/u_mult/T_r_reg is absorbed into DSP u_demo/u_inv_bf/u_mult/T_r_reg.
+DSP Report: operator u_demo/u_inv_bf/u_mult/T_r0 is absorbed into DSP u_demo/u_inv_bf/u_mult/T_r_reg.
+DSP Report: Generating DSP u_demo/u_inv_bf/u_mult/T_mu_r_reg, operation Mode is: (A*(B:0x13af))'.
+DSP Report: register u_demo/u_inv_bf/u_mult/T_mu_r_reg is absorbed into DSP u_demo/u_inv_bf/u_mult/T_mu_r_reg.
+DSP Report: operator u_demo/u_inv_bf/u_mult/T_mu_r0 is absorbed into DSP u_demo/u_inv_bf/u_mult/T_mu_r_reg.
+DSP Report: Generating DSP u_demo/u_inv_bf/u_mult/r_r_reg, operation Mode is: C'-A*(B:0xd01).
+DSP Report: register u_demo/u_inv_bf/u_mult/T_lo_r_reg is absorbed into DSP u_demo/u_inv_bf/u_mult/r_r_reg.
+DSP Report: register u_demo/u_inv_bf/u_mult/r_r_reg is absorbed into DSP u_demo/u_inv_bf/u_mult/r_r_reg.
+DSP Report: operator u_demo/u_inv_bf/u_mult/r_r0 is absorbed into DSP u_demo/u_inv_bf/u_mult/r_r_reg.
+DSP Report: operator u_demo/u_inv_bf/u_mult/quo_q is absorbed into DSP u_demo/u_inv_bf/u_mult/r_r_reg.
+DSP Report: Generating DSP u_demo/u_scale/T_r_reg, operation Mode is: (A2*(B:0xce7)')'.
+DSP Report: register u_demo/u_scale/b_r_reg is absorbed into DSP u_demo/u_scale/T_r_reg.
+DSP Report: register u_demo/u_scale/a_r_reg is absorbed into DSP u_demo/u_scale/T_r_reg.
+DSP Report: register u_demo/u_scale/T_r_reg is absorbed into DSP u_demo/u_scale/T_r_reg.
+DSP Report: operator u_demo/u_scale/T_r0 is absorbed into DSP u_demo/u_scale/T_r_reg.
+DSP Report: Generating DSP u_demo/u_scale/T_mu_r_reg, operation Mode is: (A*(B:0x13af))'.
+DSP Report: register u_demo/u_scale/T_mu_r_reg is absorbed into DSP u_demo/u_scale/T_mu_r_reg.
+DSP Report: operator u_demo/u_scale/T_mu_r0 is absorbed into DSP u_demo/u_scale/T_mu_r_reg.
+DSP Report: Generating DSP u_demo/u_scale/r_r_reg, operation Mode is: C'-A*(B:0xd01).
+DSP Report: register u_demo/u_scale/T_lo_r_reg is absorbed into DSP u_demo/u_scale/r_r_reg.
+DSP Report: register u_demo/u_scale/r_r_reg is absorbed into DSP u_demo/u_scale/r_r_reg.
+DSP Report: operator u_demo/u_scale/r_r0 is absorbed into DSP u_demo/u_scale/r_r_reg.
+DSP Report: operator u_demo/u_scale/quo_q is absorbed into DSP u_demo/u_scale/r_r_reg.
+INFO: [Synth 8-3971] The signal "arty_top/u_demo/u_mem/mem_reg" was recognized as a true dual port RAM template.
+---------------------------------------------------------------------------------
+Finished Cross Boundary and Area Optimization : Time (s): cpu = 00:00:17 ; elapsed = 00:00:18 . Memory (MB): peak = 2357.973 ; gain = 657.250 ; free physical = 265829 ; free virtual = 641383
+---------------------------------------------------------------------------------
+ Sort Area is  u_demo/u_fwd_bf/u_mult/T_r_reg_b : 0 0 : 1097 1097 : Used 1 time 0
+ Sort Area is  u_demo/u_inv_bf/u_mult/T_r_reg_6 : 0 0 : 1097 1097 : Used 1 time 0
+ Sort Area is  u_demo/u_scale/T_r_reg_e : 0 0 : 1097 1097 : Used 1 time 0
+ Sort Area is  u_demo/u_fwd_bf/u_mult/T_mu_r_reg_c : 0 0 : 1021 1021 : Used 1 time 0
+ Sort Area is  u_demo/u_inv_bf/u_mult/T_mu_r_reg_8 : 0 0 : 1021 1021 : Used 1 time 0
+ Sort Area is  u_demo/u_scale/T_mu_r_reg_f : 0 0 : 1021 1021 : Used 1 time 0
+ Sort Area is  u_demo/u_load_mul/T_mu_r_reg_2 : 0 0 : 901 901 : Used 1 time 0
+ Sort Area is  u_demo/u_load_mul/T_r_reg_0 : 0 0 : 706 706 : Used 1 time 0
+ Sort Area is  u_demo/u_fwd_bf/u_mult/r_r_reg_d : 0 0 : 546 546 : Used 1 time 0
+ Sort Area is  u_demo/u_inv_bf/u_mult/r_r_reg_a : 0 0 : 546 546 : Used 1 time 0
+ Sort Area is  u_demo/u_load_mul/r_r_reg_4 : 0 0 : 546 546 : Used 1 time 0
+ Sort Area is  u_demo/u_scale/r_r_reg_10 : 0 0 : 546 546 : Used 1 time 0
+---------------------------------------------------------------------------------
+Start ROM, RAM, DSP, Shift Register and Retiming Reporting
+---------------------------------------------------------------------------------
+
+ROM: Preliminary Mapping Report
++------------+-----------------------+---------------+----------------+
+|Module Name | RTL Object            | Depth x Width | Implemented As | 
++------------+-----------------------+---------------+----------------+
+|twiddle_rom | zeta                  | 128x12        | LUT            | 
+|arty_top    | u_demo/u_fwd_rom/zeta | 128x12        | LUT            | 
+|arty_top    | u_demo/u_inv_rom/zeta | 128x12        | LUT            | 
++------------+-----------------------+---------------+----------------+
+
+
+Block RAM: Preliminary Mapping Report (see note below)
++------------+----------------------+------------------------+---+---+------------------------+---+---+------------------+--------+--------+
+|Module Name | RTL Object           | PORT A (Depth x Width) | W | R | PORT B (Depth x Width) | W | R | Ports driving FF | RAMB18 | RAMB36 | 
++------------+----------------------+------------------------+---+---+------------------------+---+---+------------------+--------+--------+
+|arty_top    | u_demo/u_mem/mem_reg | 256 x 12(READ_FIRST)   | W | R | 256 x 12(READ_FIRST)   | W | R | Port A and B     | 1      | 0      | 
++------------+----------------------+------------------------+---+---+------------------------+---+---+------------------+--------+--------+
+
+Note: The table above is a preliminary report that shows the Block RAMs at the current stage of the synthesis flow. Some Block RAMs may be reimplemented as non Block RAM primitives later in the synthesis flow. Multiple instantiated Block RAMs are reported only once. 
+
+Distributed RAM: Preliminary Mapping Report (see note below)
++------------+---------------------+-----------+----------------------+--------------+
+|Module Name | RTL Object          | Inference | Size (Depth x Width) | Primitives   | 
++------------+---------------------+-----------+----------------------+--------------+
+|arty_top    | u_demo/orig_mem_reg | Implied   | 256 x 12             | RAM64M x 16  | 
++------------+---------------------+-----------+----------------------+--------------+
+
+Note: The table above is a preliminary report that shows the Distributed RAMs at the current stage of the synthesis flow. Some Distributed RAMs may be reimplemented as non Distributed RAM primitives later in the synthesis flow. Multiple instantiated RAMs are reported only once.
+
+DSP: Preliminary Mapping Report (see note below. The ' indicates corresponding REG is set)
++------------+------------------+--------+--------+--------+--------+--------+------+------+------+------+-------+------+------+
+|Module Name | DSP Mapping      | A Size | B Size | C Size | D Size | P Size | AREG | BREG | CREG | DREG | ADREG | MREG | PREG | 
++------------+------------------+--------+--------+--------+--------+--------+------+------+------+------+-------+------+------+
+|mod_mult    | ((A:0x11)'*B2)'  | 8      | 12     | -      | -      | 20     | 1    | 1    | -    | -    | -     | 1    | 0    | 
+|mod_mult    | (A*(B:0x13af))'  | 20     | 13     | -      | -      | 33     | 0    | 0    | -    | -    | -     | 1    | 0    | 
+|mod_mult    | C'-A*(B:0xd01)   | 13     | 12     | 13     | -      | 13     | 0    | 0    | 1    | -    | -     | 0    | 1    | 
+|mod_mult    | (A2*B2)'         | 12     | 12     | -      | -      | 24     | 1    | 1    | -    | -    | -     | 1    | 0    | 
+|mod_mult    | (A*(B:0x13af))'  | 24     | 13     | -      | -      | 37     | 0    | 0    | -    | -    | -     | 1    | 0    | 
+|mod_mult    | C'-A*(B:0xd01)   | 13     | 12     | 13     | -      | 13     | 0    | 0    | 1    | -    | -     | 0    | 1    | 
+|mod_mult    | (A2*B2)'         | 12     | 12     | -      | -      | 24     | 1    | 1    | -    | -    | -     | 1    | 0    | 
+|mod_mult    | (A*(B:0x13af))'  | 24     | 13     | -      | -      | 37     | 0    | 0    | -    | -    | -     | 1    | 0    | 
+|mod_mult    | C'-A*(B:0xd01)   | 13     | 12     | 13     | -      | 13     | 0    | 0    | 1    | -    | -     | 0    | 1    | 
+|mod_mult    | (A2*(B:0xce7)')' | 12     | 12     | -      | -      | 24     | 1    | 1    | -    | -    | -     | 1    | 0    | 
+|mod_mult    | (A*(B:0x13af))'  | 24     | 13     | -      | -      | 37     | 0    | 0    | -    | -    | -     | 1    | 0    | 
+|mod_mult    | C'-A*(B:0xd01)   | 13     | 12     | 13     | -      | 13     | 0    | 0    | 1    | -    | -     | 0    | 1    | 
++------------+------------------+--------+--------+--------+--------+--------+------+------+------+------+-------+------+------+
+
+Note: The table above is a preliminary report that shows the DSPs inferred at the current stage of the synthesis flow. Some DSP may be reimplemented as non DSP primitives later in the synthesis flow. Multiple instantiated DSPs are reported only once.
+---------------------------------------------------------------------------------
+Finished ROM, RAM, DSP, Shift Register and Retiming Reporting
+---------------------------------------------------------------------------------
+---------------------------------------------------------------------------------
+Start Applying XDC Timing Constraints
+---------------------------------------------------------------------------------
+---------------------------------------------------------------------------------
+Finished Applying XDC Timing Constraints : Time (s): cpu = 00:00:22 ; elapsed = 00:00:23 . Memory (MB): peak = 2357.973 ; gain = 657.250 ; free physical = 272230 ; free virtual = 647587
+---------------------------------------------------------------------------------
+---------------------------------------------------------------------------------
+Start Timing Optimization
+---------------------------------------------------------------------------------
+---------------------------------------------------------------------------------
+Finished Timing Optimization : Time (s): cpu = 00:00:24 ; elapsed = 00:00:25 . Memory (MB): peak = 2357.973 ; gain = 657.250 ; free physical = 272074 ; free virtual = 647449
+---------------------------------------------------------------------------------
+---------------------------------------------------------------------------------
+Start ROM, RAM, DSP, Shift Register and Retiming Reporting
+---------------------------------------------------------------------------------
+
+Block RAM: Final Mapping Report
++------------+----------------------+------------------------+---+---+------------------------+---+---+------------------+--------+--------+
+|Module Name | RTL Object           | PORT A (Depth x Width) | W | R | PORT B (Depth x Width) | W | R | Ports driving FF | RAMB18 | RAMB36 | 
++------------+----------------------+------------------------+---+---+------------------------+---+---+------------------+--------+--------+
+|arty_top    | u_demo/u_mem/mem_reg | 256 x 12(READ_FIRST)   | W | R | 256 x 12(READ_FIRST)   | W | R | Port A and B     | 1      | 0      | 
++------------+----------------------+------------------------+---+---+------------------------+---+---+------------------+--------+--------+
+
+
+Distributed RAM: Final Mapping Report
++------------+---------------------+-----------+----------------------+--------------+
+|Module Name | RTL Object          | Inference | Size (Depth x Width) | Primitives   | 
++------------+---------------------+-----------+----------------------+--------------+
+|arty_top    | u_demo/orig_mem_reg | Implied   | 256 x 12             | RAM64M x 16  | 
++------------+---------------------+-----------+----------------------+--------------+
+
+---------------------------------------------------------------------------------
+Finished ROM, RAM, DSP, Shift Register and Retiming Reporting
+---------------------------------------------------------------------------------
+---------------------------------------------------------------------------------
+Start Technology Mapping
+---------------------------------------------------------------------------------
+INFO: [Synth 8-7052] The timing for the instance u_demo/u_mem/mem_reg (implemented as a Block RAM) might be sub-optimal as no optional output register could be merged into the ram block. Providing additional output register may help in improving timing.
+INFO: [Synth 8-7052] The timing for the instance u_demo/u_mem/mem_reg (implemented as a Block RAM) might be sub-optimal as no optional output register could be merged into the ram block. Providing additional output register may help in improving timing.
+---------------------------------------------------------------------------------
+Finished Technology Mapping : Time (s): cpu = 00:00:24 ; elapsed = 00:00:25 . Memory (MB): peak = 2357.973 ; gain = 657.250 ; free physical = 272075 ; free virtual = 647452
+---------------------------------------------------------------------------------
+---------------------------------------------------------------------------------
+Start IO Insertion
+---------------------------------------------------------------------------------
+---------------------------------------------------------------------------------
+Start Flattening Before IO Insertion
+---------------------------------------------------------------------------------
+---------------------------------------------------------------------------------
+Finished Flattening Before IO Insertion
+---------------------------------------------------------------------------------
+---------------------------------------------------------------------------------
+Start Final Netlist Cleanup
+---------------------------------------------------------------------------------
+---------------------------------------------------------------------------------
+Finished Final Netlist Cleanup
+---------------------------------------------------------------------------------
+---------------------------------------------------------------------------------
+Finished IO Insertion : Time (s): cpu = 00:00:28 ; elapsed = 00:00:29 . Memory (MB): peak = 2357.973 ; gain = 657.250 ; free physical = 272168 ; free virtual = 647575
+---------------------------------------------------------------------------------
+---------------------------------------------------------------------------------
+Start Renaming Generated Instances
+---------------------------------------------------------------------------------
+---------------------------------------------------------------------------------
+Finished Renaming Generated Instances : Time (s): cpu = 00:00:28 ; elapsed = 00:00:29 . Memory (MB): peak = 2357.973 ; gain = 657.250 ; free physical = 272168 ; free virtual = 647575
+---------------------------------------------------------------------------------
+---------------------------------------------------------------------------------
+Start Rebuilding User Hierarchy
+---------------------------------------------------------------------------------
+---------------------------------------------------------------------------------
+Finished Rebuilding User Hierarchy : Time (s): cpu = 00:00:28 ; elapsed = 00:00:29 . Memory (MB): peak = 2357.973 ; gain = 657.250 ; free physical = 272192 ; free virtual = 647600
+---------------------------------------------------------------------------------
+---------------------------------------------------------------------------------
+Start Renaming Generated Ports
+---------------------------------------------------------------------------------
+---------------------------------------------------------------------------------
+Finished Renaming Generated Ports : Time (s): cpu = 00:00:28 ; elapsed = 00:00:29 . Memory (MB): peak = 2357.973 ; gain = 657.250 ; free physical = 272192 ; free virtual = 647600
+---------------------------------------------------------------------------------
+---------------------------------------------------------------------------------
+Start Handling Custom Attributes
+---------------------------------------------------------------------------------
+---------------------------------------------------------------------------------
+Finished Handling Custom Attributes : Time (s): cpu = 00:00:28 ; elapsed = 00:00:29 . Memory (MB): peak = 2357.973 ; gain = 657.250 ; free physical = 272200 ; free virtual = 647608
+---------------------------------------------------------------------------------
+---------------------------------------------------------------------------------
+Start Renaming Generated Nets
+---------------------------------------------------------------------------------
+---------------------------------------------------------------------------------
+Finished Renaming Generated Nets : Time (s): cpu = 00:00:28 ; elapsed = 00:00:29 . Memory (MB): peak = 2357.973 ; gain = 657.250 ; free physical = 272200 ; free virtual = 647608
+---------------------------------------------------------------------------------
+---------------------------------------------------------------------------------
+Start Writing Synthesis Report
+---------------------------------------------------------------------------------
+
+DSP Final Report (the ' indicates corresponding REG is set)
++------------+-------------+--------+--------+--------+--------+--------+------+------+------+------+-------+------+------+
+|Module Name | DSP Mapping | A Size | B Size | C Size | D Size | P Size | AREG | BREG | CREG | DREG | ADREG | MREG | PREG | 
++------------+-------------+--------+--------+--------+--------+--------+------+------+------+------+-------+------+------+
+|mod_mult    | (A'*B')'    | 12     | 12     | -      | -      | 24     | 1    | 1    | -    | -    | -     | 0    | 1    | 
+|mod_mult    | (A*B)'      | 24     | 13     | -      | -      | 37     | 0    | 0    | -    | -    | -     | 0    | 1    | 
+|mod_mult    | (C'-(A*B))' | 13     | 12     | 13     | -      | 13     | 0    | 0    | 0    | -    | -     | 0    | 1    | 
+|mod_mult    | (A'*B')'    | 12     | 12     | -      | -      | 24     | 1    | 1    | -    | -    | -     | 0    | 1    | 
+|mod_mult    | (A*B)'      | 24     | 13     | -      | -      | 37     | 0    | 0    | -    | -    | -     | 0    | 1    | 
+|mod_mult    | (C'-(A*B))' | 13     | 12     | 13     | -      | 13     | 0    | 0    | 0    | -    | -     | 0    | 1    | 
+|mod_mult    | (A'*B)'     | 8      | 5      | -      | -      | 20     | 1    | 0    | -    | -    | -     | 0    | 1    | 
+|mod_mult    | (A*B)'      | 20     | 13     | -      | -      | 33     | 0    | 0    | -    | -    | -     | 0    | 1    | 
+|mod_mult    | (C'-(A*B))' | 9      | 12     | 13     | -      | 13     | 0    | 0    | 0    | -    | -     | 0    | 1    | 
+|mod_mult    | (A'*B)'     | 12     | 12     | -      | -      | 24     | 1    | 0    | -    | -    | -     | 0    | 1    | 
+|mod_mult    | (A*B)'      | 24     | 13     | -      | -      | 37     | 0    | 0    | -    | -    | -     | 0    | 1    | 
+|mod_mult    | (C'-(A*B))' | 13     | 12     | 13     | -      | 13     | 0    | 0    | 0    | -    | -     | 0    | 1    | 
++------------+-------------+--------+--------+--------+--------+--------+------+------+------+------+-------+------+------+
+
+
+Report BlackBoxes: 
++-+--------------+----------+
+| |BlackBox name |Instances |
++-+--------------+----------+
++-+--------------+----------+
+
+Report Cell Usage: 
++------+---------+------+
+|      |Cell     |Count |
++------+---------+------+
+|1     |BUFG     |     1|
+|2     |CARRY4   |    82|
+|3     |DSP48E1  |    12|
+|7     |LUT1     |   104|
+|8     |LUT2     |   137|
+|9     |LUT3     |   114|
+|10    |LUT4     |    78|
+|11    |LUT5     |    53|
+|12    |LUT6     |   191|
+|13    |MUXF7    |    24|
+|14    |RAM64M   |    16|
+|15    |RAMB18E1 |     1|
+|16    |FDRE     |   243|
+|17    |FDSE     |    21|
+|18    |IBUF     |     3|
+|19    |OBUF     |     4|
++------+---------+------+
+---------------------------------------------------------------------------------
+Finished Writing Synthesis Report : Time (s): cpu = 00:00:28 ; elapsed = 00:00:29 . Memory (MB): peak = 2357.973 ; gain = 657.250 ; free physical = 272200 ; free virtual = 647608
+---------------------------------------------------------------------------------
+Synthesis finished with 0 errors, 0 critical warnings and 1 warnings.
+Synthesis Optimization Runtime : Time (s): cpu = 00:00:26 ; elapsed = 00:00:27 . Memory (MB): peak = 2357.973 ; gain = 509.465 ; free physical = 272196 ; free virtual = 647604
+Synthesis Optimization Complete : Time (s): cpu = 00:00:29 ; elapsed = 00:00:30 . Memory (MB): peak = 2357.973 ; gain = 657.250 ; free physical = 272196 ; free virtual = 647604
+INFO: [Project 1-571] Translating synthesized netlist
+Netlist sorting complete. Time (s): cpu = 00:00:00.01 ; elapsed = 00:00:00.01 . Memory (MB): peak = 2357.973 ; gain = 0.000 ; free physical = 272469 ; free virtual = 647878
+INFO: [Netlist 29-17] Analyzing 135 Unisim elements for replacement
+INFO: [Netlist 29-28] Unisim Transformation completed in 0 CPU seconds
+INFO: [Project 1-570] Preparing netlist for logic optimization
+INFO: [Opt 31-138] Pushed 0 inverter(s) to 0 load pin(s).
+Netlist sorting complete. Time (s): cpu = 00:00:00 ; elapsed = 00:00:00 . Memory (MB): peak = 2357.973 ; gain = 0.000 ; free physical = 272528 ; free virtual = 647944
+INFO: [Project 1-111] Unisim Transformation Summary:
+  A total of 16 instances were transformed.
+  RAM64M => RAM64M (RAMD64E(x4)): 16 instances
+
+Synth Design complete | Checksum: 601affcf
+INFO: [Common 17-83] Releasing license: Synthesis
+52 Infos, 2 Warnings, 0 Critical Warnings and 0 Errors encountered.
+synth_design completed successfully
+synth_design: Time (s): cpu = 00:00:35 ; elapsed = 00:00:36 . Memory (MB): peak = 2357.973 ; gain = 1007.496 ; free physical = 272485 ; free virtual = 647902
+INFO: [Common 17-2834] synth_design peak Physical Memory [PSS] (MB): overall = 1808.497; main = 1524.390; forked = 343.351
+INFO: [Common 17-2834] synth_design peak Virtual Memory [VSS] (MB): overall = 3308.906; main = 2357.941; forked = 982.980
+Write ShapeDB Complete: Time (s): cpu = 00:00:00 ; elapsed = 00:00:00 . Memory (MB): peak = 2381.949 ; gain = 0.000 ; free physical = 272458 ; free virtual = 647875
+INFO: [Common 17-1381] The checkpoint '/home/coder/ntt-butterfly-sky26c/arty_a7_100t/vivado_project/arty_top_proj/arty_top_proj.runs/synth_1/arty_top.dcp' has been generated.
+INFO: [runtcl-4] Executing : report_utilization -file arty_top_utilization_synth.rpt -pb arty_top_utilization_synth.pb
+INFO: [Common 17-206] Exiting Vivado at Wed Aug 26 16:22:55 2026...
