@@ -1,8 +1,0 @@
-# Makefile_bfu -- the multi-cycle five-mode arithmetic core
-SIM ?= icarus
-TOPLEVEL_LANG ?= verilog
-SRC_DIR = $(PWD)/../src
-VERILOG_SOURCES = $(SRC_DIR)/bfu_core.v $(SRC_DIR)/ser_fqmul.v
-TOPLEVEL = bfu_core
-COCOTB_TEST_MODULES = test_bfu
-include $(shell cocotb-config --makefiles)/Makefile.sim

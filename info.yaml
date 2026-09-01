@@ -3,10 +3,17 @@ project:
   title:        "ML-KEM NTT/INTT Accelerator"      # Project title
   author:       "Brendon"      # Your name
   discord:      ""      # Your discord username, for communication and automatically assigning you a Tapeout role (optional)
-  description:  "Modular arithmetic engine for the ML-KEM-512 number theoretic transform: Cooley-Tukey and Gentleman-Sande butterflies over a shared serial Montgomery multiplier."      # One line description of what your project does
+  description:  "Modular arithmetic engine for the ML-KEM-512 number theoretic transform: Cooley-Tukey and Gentleman-Sande butterflies and an on-chip twiddle ROM over a pipelined Barrett multiplier."      # One line description of what your project does
   language:     "Verilog" # other examples include SystemVerilog, Amaranth, VHDL, etc
   clock_hz:     50000000       # 50 MHz -- matches CLOCK_PERIOD: 20 (ns) in src/config.json
   # How many tiles your design occupies? A single tile is about 167x108 uM.
+  #
+  # Synthesis puts the design at 2,756 cells, about 21,900 um2 at this
+  # project's measured 7.94 um2 per cell -- roughly 64% of a 1x2 tile's core,
+  # against the 66.6% at which the previous 1x2 build hardened with +6.2 ns of
+  # setup slack. The twiddle ROM is on chip (467 cells); the 256-coefficient
+  # polynomial is not, because 3,072 flip-flops is about 80,800 um2 -- 222% of
+  # this tile's 36,347 um2 of die before any logic at all.
   tiles: "1x2"          # Valid values: 1x1, 1x2, 2x2, 3x2, 4x2, 6x2 or 8x2
 
   # Your top module name must start with "tt_um_". Make it unique by including your github username:
@@ -17,14 +24,18 @@ project:
   # Don't forget to also update `PROJECT_SOURCES` in test/Makefile.
   source_files:
   - "tt_um_ntt.v"
-  - "bfu_io.v"
-  - "bfu_core.v"
-  - "ser_fqmul.v"
+  - "ntt_top.v"
+  - "ntt_io.v"
+  - "twiddle_rom.v"
+  - "butterfly.v"
+  - "mod_mult.v"
+  - "mod_add.v"
+  - "mod_sub.v"
 
 # The pinout of your project. Leave unused pins blank. DO NOT delete or add any pins.
 # This section is for the datasheet/website. Use descriptive names (e.g., RX, TX, MOSI, SCL, SEG_A, etc.).
 pinout:
-  # Inputs -- write data byte
+  # Inputs -- data byte in
   ui[0]: "din0"
   ui[1]: "din1"
   ui[2]: "din2"
@@ -34,7 +45,7 @@ pinout:
   ui[6]: "din6"
   ui[7]: "din7"
 
-  # Outputs -- result byte
+  # Outputs -- data byte out
   uo[0]: "dout0"
   uo[1]: "dout1"
   uo[2]: "dout2"

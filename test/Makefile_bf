@@ -1,0 +1,9 @@
+# Makefile_bf -- the shared CT / GS / MUL / ZMUL / ADD datapath
+SIM ?= icarus
+TOPLEVEL_LANG ?= verilog
+SRC_DIR = $(PWD)/../src
+SIM_BUILD = sim_build/bf
+VERILOG_SOURCES = $(SRC_DIR)/butterfly.v $(SRC_DIR)/mod_mult.v                   $(SRC_DIR)/mod_add.v $(SRC_DIR)/mod_sub.v
+TOPLEVEL = butterfly
+COCOTB_TEST_MODULES = test_butterfly
+include $(shell cocotb-config --makefiles)/Makefile.sim

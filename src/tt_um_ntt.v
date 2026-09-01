@@ -1,9 +1,11 @@
 /*
  * tt_um_ntt.v -- Tiny Tapeout wrapper for the ML-KEM-512 NTT/INTT accelerator.
  *
- * The chip is the arithmetic engine of the transform. A host -- an Arty A7
- * FPGA -- holds the 256-coefficient polynomial and walks the address pattern;
- * this part performs the modular arithmetic each butterfly needs.
+ * The chip is the arithmetic engine of the transform, and it holds the twiddle
+ * table. A host -- an Arty A7 FPGA -- holds the 256-coefficient polynomial and
+ * walks the address pattern; the chip performs every modular operation the
+ * forward transform, the inverse transform and basemul need, and looks up its
+ * own twiddles from an index.
  *
  * Pin map:
  *   ui_in [7:0]  write data byte
@@ -14,9 +16,8 @@
  *   uio_out[5]   out_valid
  *   uio_out[6]   busy
  *
- * The host supplies the twiddle factor as a full 16-bit value; there is no
- * on-chip twiddle ROM. Operations are multi-cycle, so the host must wait for
- * busy to fall before writing new operands.
+ * Operations are multi-cycle, so the host must wait for busy to fall before
+ * writing new operands. See src/ntt_io.v for the register map and the protocol.
  *
  * SPDX-License-Identifier: Apache-2.0
  */
@@ -42,9 +43,9 @@ module tt_um_ntt (
     wire       out_valid;
     wire       busy;
 
-    bfu_io u_bfu (
+    ntt_top u_ntt (
         .clk       (clk),
-        .rst       (~rst_n),   // the core uses active-high reset, TT supplies active-low
+        .rst       (~rst_n),   // the engine uses active-high reset, TT supplies active-low
         .in_byte   (ui_in),
         .waddr     (waddr),
         .we        (we),
