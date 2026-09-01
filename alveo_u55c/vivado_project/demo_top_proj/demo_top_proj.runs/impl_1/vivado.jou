@@ -1,0 +1,14 @@
+#-----------------------------------------------------------
+# Vivado v2023.2 (64-bit)
+# SW Build 4029153 on Fri Oct 13 20:13:54 MDT 2023
+# IP Build 4028589 on Sat Oct 14 00:45:43 MDT 2023
+# SharedData Build 4025554 on Tue Oct 10 17:18:54 MDT 2023
+# Start of session at: Wed Aug 26 16:26:29 2026
+# Process ID: 3412114
+# Current directory: /home/coder/ntt-butterfly-sky26c/alveo_u55c/vivado_project/demo_top_proj/demo_top_proj.runs/impl_1
+# Command line: vivado -log demo_top.vdi -applog -product Vivado -messageDb vivado.pb -mode batch -source demo_top.tcl -notrace
+# Log file: /home/coder/ntt-butterfly-sky26c/alveo_u55c/vivado_project/demo_top_proj/demo_top_proj.runs/impl_1/demo_top.vdi
+# Journal file: /home/coder/ntt-butterfly-sky26c/alveo_u55c/vivado_project/demo_top_proj/demo_top_proj.runs/impl_1/vivado.jou
+# Running On: coder-mboudames-tt26, OS: Linux, CPU Frequency: 3399.858 MHz, CPU Physical cores: 4, Host memory: 1082013 MB
+#-----------------------------------------------------------
+source demo_top.tcl -notrace
