@@ -44,13 +44,18 @@
 // bytes, since k and ctrl are constant across a whole block.
 //
 // ---------------------------------------------------------------------------
-// Two latencies, which is why busy exists
+// One latency for every operation
 // ---------------------------------------------------------------------------
-// CT, GS, FQMUL and ZMUL occupy the multiplier and take three clocks. BARRETT
-// and ADD use no multiplier at all -- Barrett is a combinational unit and ADD
-// is an adder -- so their results are live the moment they are launched. The
-// host polls busy rather than counting clocks, which is exactly what makes a
-// mixed-latency datapath usable over a byte bus.
+// All six ops take exactly three clocks. An earlier revision let BARRETT and
+// ADD answer immediately, since neither needs the multiplier -- but that put
+// the whole Barrett reduction inside a single-cycle path running from the op
+// register into the result register, and post-layout timing rejected it by
+// 1.51 ns at the slow corner. Barrett is registered now, so its latency is the
+// multiplier's, and the special case here disappeared with it.
+//
+// The host still polls busy rather than counting clocks. That costs nothing and
+// keeps the protocol honest if a future revision reintroduces a second
+// latency.
 
 `default_nettype none
 
@@ -81,9 +86,6 @@ module ntt_io (
     input  wire signed [15:0] b_out,
     input  wire               mul_done
 );
-
-    localparam [2:0] OP_BARRETT = 3'd4,
-                     OP_ADD     = 3'd5;
 
     // ---- operand registers -------------------------------------------------
     reg signed [15:0] a_reg, b_reg;
@@ -138,11 +140,8 @@ module ntt_io (
         else     start_d <= start;
     end
 
-    // BARRETT and ADD need no multiply, so their results are already live and
-    // the operation finishes in the cycle it starts.
-    wire no_mul = (op_reg == OP_BARRETT) | (op_reg == OP_ADD);
-
-    assign issue = launch & ~no_mul;
+    // Every op goes through the datapath, so issue is simply the launch.
+    assign issue = launch;
 
     // ---- waiting for the datapath ------------------------------------------
     always @(posedge clk) begin
@@ -151,7 +150,7 @@ module ntt_io (
         else if (mul_done) in_flight <= 1'b0;
     end
 
-    wire result_now = (launch & no_mul) | (in_flight & mul_done);
+    wire result_now = in_flight & mul_done;
 
     // ---- unload the 32-bit result, low byte first --------------------------
     // The first byte goes straight out of the datapath, so the shift register
@@ -181,8 +180,7 @@ module ntt_io (
     end
 
     // High from launch until the last result byte has been presented, so the
-    // host can poll instead of counting clocks -- which matters here because
-    // the operation length depends on the op.
+    // host polls rather than counting clocks.
     assign busy = launch | in_flight | (out_rem != 2'd0) | out_valid;
 
 endmodule

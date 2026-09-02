@@ -367,10 +367,16 @@ async def test_basemul(cocotb_dut):
 
 
 @cocotb.test()
-async def test_latency_differs_by_op(cocotb_dut):
-    """BARRETT and ADD use no multiplier, so they must answer sooner than the
-    ops that do. Polling busy rather than counting clocks is what makes a
-    mixed-latency datapath usable, and this is the measurement behind it."""
+async def test_latency_is_uniform(cocotb_dut):
+    """Every op must take the same number of clocks.
+
+    An earlier revision let BARRETT and ADD answer immediately, which left the
+    whole Barrett reduction in a single-cycle path from the op register to the
+    result register -- post-layout timing rejected it by 1.51 ns at the slow
+    corner. Barrett is registered now and the latency is uniform. A datapath
+    that silently reverts to two latencies would corrupt a host that had
+    stopped polling, so this is pinned down rather than assumed.
+    """
     dut = cocotb_dut
     cocotb.start_soon(Clock(dut.clk, 20, unit="ns").start())
     acc = Accel(dut)
@@ -397,17 +403,13 @@ async def test_latency_differs_by_op(cocotb_dut):
             assert n < OP_TIMEOUT
             await RisingEdge(d.clk)
 
-    n_bar = await clocks_to_first_byte(OP_BARRETT, 9000, 0)
-    await ClockCycles(dut.clk, 8)
-    n_add = await clocks_to_first_byte(OP_ADD, 1000, 2000)
-    await ClockCycles(dut.clk, 8)
-    n_mul = await clocks_to_first_byte(OP_FQMUL, 1000, 2000)
+    seen = {}
+    for op in (OP_CT, OP_GS, OP_FQMUL, OP_ZMUL, OP_BARRETT, OP_ADD):
+        seen[OP_NAMES[op]] = await clocks_to_first_byte(op, 1000, 2000)
+        await ClockCycles(dut.clk, 8)
 
-    assert n_bar < n_mul and n_add < n_mul, (
-        f"BARRETT {n_bar}, ADD {n_add}, FQMUL {n_mul}: the non-multiplying ops "
-        f"should be quicker")
-    dut._log.info(f"BARRETT {n_bar} clocks, ADD {n_add}, FQMUL {n_mul} -- "
-                  f"poll busy, do not count")
+    assert len(set(seen.values())) == 1, f"latency is not uniform: {seen}"
+    dut._log.info(f"every op answers in {list(seen.values())[0]} clocks: {seen}")
 
 
 @cocotb.test()

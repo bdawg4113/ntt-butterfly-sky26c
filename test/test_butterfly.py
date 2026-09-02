@@ -7,10 +7,13 @@
 # runs. The tests therefore interleave the ops rather than running each in a
 # clean block.
 #
-# Two latencies live here. CT, GS, FQMUL and ZMUL occupy the multiplier and take
-# three clocks; BARRETT and ADD are combinational and answer immediately. That
-# is deliberate -- it is the whole reason a standalone Barrett unit was worth
-# the area -- and test_each_op pins both down.
+# Every op takes exactly three clocks. An earlier revision let BARRETT and ADD
+# answer in zero, since neither needs the multiplier -- but that left the whole
+# Barrett reduction inside a single-cycle path from the op register to the
+# caller's result register, and post-layout timing rejected it by 1.51 ns at the
+# slow corner. Barrett is registered now. test_each_op pins the uniform latency
+# down, because a datapath that silently changes latency is the failure this
+# design would be least likely to notice.
 
 import random
 from collections import Counter
@@ -19,7 +22,7 @@ import cocotb
 from cocotb.clock import Clock
 from cocotb.triggers import RisingEdge, ReadOnly, NextTimeStep
 
-from ntt_golden import (Q, R, ZETAS, apply_op, OP_NAMES, MUL_OPS, s16,
+from ntt_golden import (Q, R, ZETAS, apply_op, OP_NAMES, s16,
                         OP_CT, OP_GS, OP_FQMUL, OP_ZMUL, OP_BARRETT, OP_ADD)
 
 ALL_OPS = [OP_CT, OP_GS, OP_FQMUL, OP_ZMUL, OP_BARRETT, OP_ADD]
@@ -46,22 +49,16 @@ def outputs(dut):
 async def run_op(dut, op, a, b, zeta):
     """Issue one operation and return (result, clocks).
 
-    BARRETT and ADD use no multiplier, so their outputs are combinational and
-    live in the same cycle; out_valid never pulses for them.
+    Every op issues into the datapath and answers three clocks later, including
+    BARRETT and ADD, which ignore the multiplier's result.
     """
     dut.op.value = op
     dut.a.value = a
     dut.b.value = b
     dut.zeta.value = zeta
-    dut.in_valid.value = 1 if op in MUL_OPS else 0
+    dut.in_valid.value = 1
     await RisingEdge(dut.clk)
     dut.in_valid.value = 0
-
-    if op not in MUL_OPS:
-        await ReadOnly()
-        got = outputs(dut)
-        await NextTimeStep()
-        return got, 0
 
     n = 1
     while True:
@@ -98,9 +95,8 @@ async def test_each_op(dut):
                 f"{OP_NAMES[op]}(a={a}, b={b}, zeta={z}): got {got}, expected {exp}"
             seen[n] += 1
         assert len(seen) == 1, f"{OP_NAMES[op]}: variable latency {dict(seen)}"
-        want = LATENCY if op in MUL_OPS else 0
-        assert list(seen)[0] == want, \
-            f"{OP_NAMES[op]} latency {list(seen)[0]}, expected {want}"
+        assert list(seen)[0] == LATENCY, \
+            f"{OP_NAMES[op]} latency {list(seen)[0]}, expected {LATENCY}"
         dut._log.info(f"{OP_NAMES[op]:<7}: {len(cases)} operations correct, "
                       f"{list(seen)[0]} clocks each")
 

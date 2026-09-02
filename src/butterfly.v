@@ -36,27 +36,41 @@
 // reduction -- is arithmetically sound and was what an earlier revision did.
 // It costs a second pass through the multiplier for every GS butterfly,
 // doubling the inverse transform's multiply count. A dedicated Barrett unit
-// buys that back: GS now needs one multiply, not two, and the add and the
-// multiply happen in parallel rather than in sequence.
+// buys that back: GS needs one multiply, not two, and the add and the multiply
+// happen in parallel rather than in sequence.
 //
 // ---------------------------------------------------------------------------
-// Why the inverse transform is nearly free
+// Why Barrett is registered, and why every op takes three clocks
 // ---------------------------------------------------------------------------
-// CT and GS are the same primitives in a different order: CT multiplies then
-// adds and subtracts; GS subtracts, then adds and reduces. The only structural
-// difference is that GS needs its subtract BEFORE the multiplier where CT needs
-// one after. Everything expensive is shared -- the multiplier, its three
-// pipeline stages, the ROM, the operand registers.
+// An earlier revision left barrett_reduce purely combinational so that the
+// BARRETT and ADD ops could answer in zero clocks. Post-layout timing rejected
+// it: the worst path ran from the op register, through the mux that picks
+// Barrett's input, through the whole reduction -- a*v, the rounding add, the
+// shift, t*q, the subtract -- and on through the output mux into the caller's
+// result register. 22.33 ns of arrival against 20.82 ns required, a violation
+// of 1.51 ns at the slow corner across 58 endpoints, every one of them starting
+// at op[2].
 //
-// ---------------------------------------------------------------------------
-// Latency
-// ---------------------------------------------------------------------------
-// 3 clocks for the four ops that multiply, set entirely by fqmul. BARRETT and
-// ADD use no multiplier at all and are combinational, so the caller must poll
-// rather than assume a fixed latency. a, b and zeta must hold steady from
-// in_valid until out_valid: the post-multiply adder and subtractor read them
-// live rather than from a delay chain, which saves 32 flip-flops and costs
-// nothing, because the caller holds them in its operand registers anyway.
+// The zero latency was never worth anything. The caller holds a, b and op still
+// for the whole operation, so Barrett already had three clocks to settle and
+// was using one of them. It is now pipelined between two registers -- see the
+// breakdown at the reducer itself, which explains why one register was not
+// enough.
+//
+// So every op now takes exactly 3 clocks. That also removes a special case from
+// the caller: there is one latency, not two, and out_valid means the same thing
+// for all six operations. The byte-serial interface needs four write cycles and
+// four read cycles per operation anyway, so three clocks against zero is noise.
+//
+//   cycle 0   in_valid: bar_in_r latches the operand select; fqmul stage 1
+//   cycle 1   bar_r latches the reduction; fqmul stage 2
+//   cycle 2   fqmul stage 3 -- t lands at the end
+//   cycle 3   out_valid: a_out and b_out select between t, bar_r and one adder
+//
+// a, b and zeta must hold steady from in_valid until out_valid: the outputs are
+// read live from them rather than from a delay chain, which saves 32 flip-flops
+// and costs nothing, because the caller holds them in its operand registers
+// anyway.
 
 `default_nettype none
 
@@ -70,7 +84,7 @@ module butterfly (
     input  wire signed [15:0] zeta,        // Montgomery-domain, from the ROM
     output wire signed [15:0] a_out,
     output wire signed [15:0] b_out,
-    output wire               out_valid    // 3 clocks; unused by BARRETT and ADD
+    output wire               out_valid    // 3 clocks after in_valid, every op
 );
 
     localparam [2:0] OP_CT      = 3'd0,
@@ -79,6 +93,14 @@ module butterfly (
                      OP_ZMUL    = 3'd3,
                      OP_BARRETT = 3'd4,
                      OP_ADD     = 3'd5;
+
+    // One-hot decodes, computed once. The output selection below is a chain of
+    // these rather than a chain of three-bit comparisons, which is what keeps
+    // the last stage shallow.
+    wire op_ct  = (op == OP_CT);
+    wire op_gs  = (op == OP_GS);
+    wire op_bar = (op == OP_BARRETT);
+    wire op_add = (op == OP_ADD);
 
     // ---- the two sums the datapath needs ----------------------------------
     // Plain 16-bit two's complement, no modular correction: inside the
@@ -89,9 +111,11 @@ module butterfly (
 
     // ---- the multiplier ----------------------------------------------------
     // FQMUL is the only op that puts a on the first operand; every other
-    // multiplying op wants the twiddle there.
+    // multiplying op wants the twiddle there. BARRETT and ADD issue into the
+    // multiplier too and simply ignore its result -- that is what makes the
+    // latency uniform, and it costs nothing but a little switching.
     wire signed [15:0] mul_x = (op == OP_FQMUL) ? a : zeta;
-    wire signed [15:0] mul_y = (op == OP_GS)    ? diff :
+    wire signed [15:0] mul_y = op_gs            ? diff :
                                (op == OP_ZMUL)  ? a    : b;
 
     wire signed [15:0] t;
@@ -106,34 +130,70 @@ module butterfly (
         .out_valid (out_valid)
     );
 
-    // ---- the Barrett reducer ----------------------------------------------
+    // ---- the Barrett reducer, between two registers ------------------------
     // Shared between GS, which reduces a + b, and the standalone BARRETT op,
-    // which reduces a. One unit, two callers, one mux.
-    wire signed [15:0] bar_in = (op == OP_GS) ? sum : a;
+    // which reduces a.
+    //
+    // Both registers are timing fixes, and each removes a different half of the
+    // path that failed post-layout. That path measured 21 ns of logic from the
+    // op register to the caller's result register, and it broke down as:
+    //
+    //     ~5.0 ns   op[2] fanning out to every mux in the datapath
+    //    ~13.5 ns   the reduction itself: a*v, the rounding add, the shift,
+    //               t*q, the subtract
+    //     ~2.5 ns   the output mux into the result register
+    //
+    // bar_in_r cuts the first segment away from the reduction: the operand
+    // select resolves into a register of its own, so the reduction starts from
+    // a clean register output with no control fanout ahead of it. bar_r cuts
+    // the third: the output mux now selects an already-registered value.
+    //
+    // What is left is the 13.5 ns reduction alone, with a whole 20 ns clock to
+    // itself. Registering only the output -- the obvious fix -- would have left
+    // the op fanout and the reduction in series at about 18.5 ns, closing by
+    // barely 2 ns. Two registers cost 32 flip-flops and turn that into roughly
+    // 7 ns of margin.
+    //
+    // The extra cycle is free: fqmul takes three, and Barrett now finishes in
+    // two.
     wire signed [15:0] bar_out;
 
+    reg signed [15:0] bar_in_r;
+    reg               bar_v;
+    reg signed [15:0] bar_r;
+
     barrett_reduce u_barrett (
-        .a (bar_in),
+        .a (bar_in_r),
         .c (bar_out)
     );
 
-    // ---- output selection --------------------------------------------------
-    wire mirrored = (op == OP_FQMUL) | (op == OP_ZMUL) | (op == OP_BARRETT);
+    always @(posedge clk) begin
+        if (rst) begin
+            bar_in_r <= 16'sd0;
+            bar_v    <= 1'b0;
+            bar_r    <= 16'sd0;
+        end else begin
+            if (in_valid) bar_in_r <= op_gs ? sum : a;
+            bar_v <= in_valid;
+            if (bar_v) bar_r <= bar_out;
+        end
+    end
 
-    assign a_out = (op == OP_CT)      ? a + t   :
-                   (op == OP_GS)      ? bar_out :
-                   (op == OP_FQMUL)   ? t       :
-                   (op == OP_ZMUL)    ? t       :
-                   (op == OP_BARRETT) ? bar_out :
-                                        sum;      // OP_ADD
+    // ---- output selection, from registered sources -------------------------
+    // Everything feeding these muxes is either a register (t, bar_r) or one
+    // adder away from the operand registers (sum, a +/- t), so the last stage
+    // is shallow.
+    wire use_bar = op_gs | op_bar;
 
-    assign b_out = (op == OP_CT)  ? a - t :
-                   (op == OP_ADD) ? a - b :
-                   (op == OP_GS)  ? t     :
-                                    a_out;        // FQMUL, ZMUL, BARRETT mirror
+    assign a_out = op_ct   ? a + t :
+                   use_bar ? bar_r :
+                   op_add  ? sum   :
+                             t;      // FQMUL, ZMUL
 
-    // mirrored is documentation for the assignment above, not a separate signal
-    wire _unused = &{1'b0, mirrored, 1'b0};
+    assign b_out = op_ct  ? a - t :
+                   op_add ? a - b :
+                   op_gs  ? t     :
+                            a_out;   // FQMUL, ZMUL, BARRETT mirror
 
 endmodule
 

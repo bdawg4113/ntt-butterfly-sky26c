@@ -190,8 +190,13 @@ OP_CT, OP_GS, OP_FQMUL, OP_ZMUL, OP_BARRETT, OP_ADD = range(6)
 OP_NAMES = {OP_CT: "CT", OP_GS: "GS", OP_FQMUL: "FQMUL",
             OP_ZMUL: "ZMUL", OP_BARRETT: "BARRETT", OP_ADD: "ADD"}
 
-# the ops that occupy the multiplier, and therefore take 3 clocks
+# Every op takes 3 clocks. BARRETT and ADD do not need the multiplier, but they
+# issue into it anyway and ignore the result: Barrett is registered, so its
+# latency is the multiplier's, and one uniform latency removed a special case
+# from the front end. MUL_OPS records which ops actually consume a multiply,
+# which is what the transforms' cost is counted in.
 MUL_OPS = (OP_CT, OP_GS, OP_FQMUL, OP_ZMUL)
+LATENCY = 3
 
 
 def apply_op(op, a, b, zeta):
