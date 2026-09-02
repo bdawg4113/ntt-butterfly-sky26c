@@ -10,128 +10,124 @@ You can also include images in this folder and reference them in the markdown. E
 ## How it works
 
 This chip is the **modular arithmetic engine** of the Number Theoretic Transform used by **ML-KEM-512**
-(FIPS 203, formerly Kyber), and it carries the **twiddle table on die**. It performs the forward transform's
-butterflies, the inverse transform's butterflies, and the multiply-and-reduce operations the rest of a
-polynomial multiplication is built from.
+(FIPS 203, formerly Kyber). It carries **both reduction kernels** — Montgomery and Barrett — and the
+**128-entry twiddle table** on die.
 
 A host — an **Arty A7 FPGA** — holds the 256-coefficient polynomial and walks the address pattern. The chip
 does the arithmetic and looks up its own constants: the host sends a twiddle **index**, never a value.
 
-All values are **unsigned field elements in [0, q)** carried as 12 bits, with **q = 3329**.
+All values are **signed 16-bit** and centred; the modulus is **q = 3329** and the Montgomery radix is
+**R = 2¹⁶**.
 
-### What is on chip, and what is not
+### Both reductions, and the division of labour
 
-The twiddle table is 128 entries of 12 bits — **467 cells**. It removes a table from the host's memory map and
-turns each per-block twiddle write into a single index byte. Constants belong on chip.
+Every butterfly needs a multiply *and* a reduction mod q, and a hardware divider is out of the question. Two
+classic tricks replace the division with multiplies and shifts — and they are **not alternatives**. Each does
+the job the other is bad at.
 
-The polynomial does not, and that is arithmetic rather than effort. 256 coefficients of 12 bits is **3,072
-flip-flops**, about 80,800 µm² as enable flops — **222% of a 1x2 tile's 36,347 µm² of die**, before a single
-read multiplexer, write decoder or gate of logic. A build that held the array on chip measured 24,706 cells
-with the memory accounting for 21,248 of them, 86% of the design, and needed the largest tile Tiny Tapeout
-offers. State that scales with the problem size stays with the host; constants do not.
-
-### Modular reduction without a divider
-
-Barrett reduction replaces the division in "mod q" with a multiply by a precomputed reciprocal and a shift.
-The textbook form is
+**Montgomery reduction** (Theorem 6.1) takes a signed 32-bit product and returns `a·R⁻¹ mod q` with `|t| < q`:
 
 ```
-T   = a·b                    < q² = 11,082,241 < 2²⁴
-quo = (T·μ) >> 24            μ = ⌊2²⁴/q⌋ = 5039
-r   = T − quo·q              lands in [0, 2q)
-c   = (r ≥ q) ? r − q : r
+m = (a mod± R) · QINV        QINV = q⁻¹ mod 2¹⁶ = -3327
+t = (a - m·q) / R
 ```
 
-**The quotient estimate does not need all of T.** Shifting the product right first gives
+`m` is chosen precisely so that `m·q` matches `a` in the low 16 bits, which makes the division by R exact — a
+wire, not a divider. It also means the subtraction cannot borrow out of those bits, so in hardware it collapses
+to a **16-bit** subtract of the two top halves. No 32-bit subtractor exists on the die.
+
+**Barrett reduction** (Theorem 6.2) takes a signed 16-bit value and returns a centred representative in
+`(-q/2, q/2]`:
 
 ```
-quo = ((T >> 11)·μ) >> 13     same μ = 5039
+v = ⌊(2²⁶ + q/2)/q⌋ = 20159
+t = ⌊(a·v + 2²⁵)/2²⁶⌋
+barrett(a) = a - t·q
 ```
 
-which turns a **24×13 constant multiply into 13×13** — roughly half the gates in the most expensive stage.
-Discarding the low 11 bits coarsens the estimate, so the remainder lands in `[0, 6936)` rather than `[0, 2q)`
-and takes two conditional subtracts instead of one. That is a good trade: a 13-bit compare-and-subtract is a
-few dozen cells, half a constant multiplier is several hundred. Measured, the change took `mod_mult` from
-1,974 cells to **1,589**.
+`v/2²⁶` approximates `1/q` closely enough that `t` is *exactly* `round(a/q)`, which is what makes the remainder
+centred rather than merely bounded. The `2²⁵` term is what turns a floor into a round; without it every
+negative input would come back one `q` low.
 
-The bound is not an argument, it is a measurement. Over every one of the 11,082,241 reachable products the
-largest remainder before the subtracts is **6935**. Two conditional subtracts always suffice (`6935 − 2q =
-277`), and `6935 < 2¹³`, so the finishing datapath stays 13 bits wide — shifting one bit further would have
-pushed the worst case to 8975 and cost a 14th bit everywhere downstream.
+**Which goes where.** Montgomery runs after every *multiply*, because a multiply is where the R bookkeeping is
+free: the twiddle carries a factor R, the product cancels it, and the reduction rides inside the multiplier's
+own pipeline. Barrett runs after chains of *additions*, where no R factor is involved and the value simply
+needs to come back into range. Gentleman-Sande adds `a` and `b` every layer with no multiply on that path, so
+without a reducer the sum grows layer over layer until it overflows 16 bits.
 
-Only the low 13 bits of `T` and of `quo·q` are ever needed; they agree above bit 12 by construction, so the
-subtraction cannot borrow out of that field. There is no 24-bit subtractor and no 26-bit product in the block.
+That split is what makes the inverse transform cost **one** multiply per butterfly instead of two. Reusing
+`fqmul(x, R mod q)` for range reduction is arithmetically sound and was what an earlier revision did — it
+occupies the multiplier for a second pass on every GS butterfly. A dedicated Barrett unit buys that back.
+
+### The Montgomery domain
+
+Montgomery does not return `a mod q`; it returns `a·R⁻¹ mod q`. The fix (Key Idea 6.1) is to keep everything in
+the **Montgomery domain**: the twiddle table is stored pre-multiplied by R, so `fqmul(ζ·R, x) = ζ·x` arrives
+with no stray factor. The on-chip table is therefore bit-identical to the reference Kyber `zetas` array,
+beginning `-1044, -758, -359, -1517`.
+
+A table of *plain* zetas (`1, 1729, 2580, 3289…`) is the same width and the same shape and is wrong here: it
+would synthesise and simulate happily and produce a transform off by a factor of R at every butterfly.
+`test_twiddle_rom.py` pins `ζ[1] = -758` explicitly so that substitution cannot pass unnoticed.
 
 ### Why the multiplier is pipelined
 
-Written combinationally, that expression chains **three multipliers** back to back: `a·b`, then `·μ`, then
-`·q`. In sky130 that is on the order of 120 gate levels, or 12–18 ns at 0.1–0.15 ns per level. Against a 20 ns
-period it is a margin of 1.1–1.6× — no margin at all once place-and-route adds wire delay, and exactly the
-path that closes in synthesis and fails at the slow corner.
+Written combinationally, `fqmul` chains **three multipliers** back to back: the 16×16 product, then `·QINV`,
+then `·q`. That is roughly 120 gate levels in sky130, or 12–18 ns — against a 20 ns period, a margin of
+1.1–1.6×, which is none at all once place-and-route adds wire delay.
 
 Three register stages put **one multiply in each**:
 
 | stage | work |
 | ----- | ---- |
-| 1 | `t_hi ← (a·b) >> 11`, `t_lo ← (a·b)[12:0]` — one 12×12 |
-| 2 | `quo ← (t_hi·μ) >> 13` — one 13×13 |
-| 3 | `c ← finish(t_lo − (quo·q)[12:0])` — one 13×12 low half, then two conditional subtracts |
+| 1 | `p ← a·b` — one 16×16 |
+| 2 | `m ← (p mod± R)·QINV`, with `p[31:16]` carried alongside |
+| 3 | `c ← p_hi − (m·q)[31:16]` — one constant multiply and a 16-bit subtract |
 
-Latency is exactly 3 clocks, and it is free: the byte-serial pin interface cannot deliver operands anywhere
-near one per clock, so a shorter pipeline would only idle.
+Splitting the *reduction* across stages 2 and 3 matters as much as splitting off the product: folding both
+constant multiplies into one cycle would simply make that the new critical path.
 
-### The two butterflies, and why the inverse is nearly free
-
-```
-Cooley-Tukey (forward)            Gentleman-Sande (inverse)
-  t     = ζ·b mod q                 a_out = a + b     mod q
-  a_out = a + t mod q               b_out = ζ·(b − a) mod q
-  b_out = a − t mod q
-  multiply then add/sub             subtract then multiply
-```
-
-These are the same three primitives in a different order. The only structural difference is that GS needs a
-subtract **before** the multiplier where CT needs one **after** — so the inverse transform costs exactly one
-extra `mod_sub` plus a few operand multiplexers. The multiplier, its pipeline, the ROM and the operand
-registers are all shared. Adding the INTT does not add a second datapath; it rewires the one already there.
-
-The forward transform walks the twiddle index **up** from 1; the inverse walks it **down** from 127.
-
-Because the arithmetic is plain rather than Montgomery, **`INTT(NTT(f)) = f` exactly** — there is no residual
-`R` to strip, so the host loses a whole 256-operation post-processing pass. (A Montgomery datapath returns
-`f·R` and needs one.)
+Barrett is **not** pipelined — one constant multiply, a rounding add, a shift and one more constant multiply,
+about 40 gate levels. It answers in the same cycle, which is why `BARRETT` and `ADD` have zero latency while
+the multiplying ops have three.
 
 ### Operating modes
 
-`ctrl[2:0]` selects the operation:
+`ctrl[2:0]` selects the operation; `ctrl[3]` is `zneg`, which negates the twiddle.
 
 | op | name | `a_out` | `b_out` | muls | used for |
 | -- | ---- | ------- | ------- | ---- | -------- |
-| 0 | CT | `a + ζ·b` | `a − ζ·b` | 1 | forward NTT |
-| 1 | GS | `a + b` | `ζ·(b − a)` | 1 | inverse NTT |
-| 2 | MUL | `a·b` | same | 1 | basemul, and the closing 1/n scale |
-| 3 | ZMUL | `ζ·a` | same | 1 | basemul's twiddle multiply |
-| 4 | ADD | `a + b` | `a − b` | 0 | polynomial add/subtract |
+| 0 | CT | `a + fqmul(ζ,b)` | `a − fqmul(ζ,b)` | 1 | forward NTT |
+| 1 | GS | `barrett(a + b)` | `fqmul(ζ, b − a)` | 1 | inverse NTT |
+| 2 | FQMUL | `fqmul(a, b)` | same | 1 | scaling, basemul |
+| 3 | ZMUL | `fqmul(ζ, a)` | same | 1 | basemul's twiddle multiply |
+| 4 | BARRETT | `barrett(a)` | same | 0 | range control |
+| 5 | ADD | `a + b` | `a − b` | 0 | polynomial add/subtract |
 
-`ctrl[3]` is `zneg`, which selects `q − ζ` instead of `ζ`. **ZMUL and `zneg` together are what keep the
-twiddle table on chip**: `basemul` multiplies modulo `x² − ζ` with the signed pair `±zetas[64+i]`, and without
-them the host would have to hold the table after all, purely to supply that one constant. In this unsigned
-representation the negative half is `q − ζ`, a 12-bit subtract rather than 128 more ROM words.
-
-The inverse transform's closing scale is an ordinary `MUL` with `n⁻¹ mod q = 3303` as the `b` operand — one
-constant is not worth a dedicated op when the host sequences everything anyway.
+`FQMUL` with `b = 1` is a bare `montgomery_reduce`, which is how the host strips the residual Montgomery
+factor after a round trip. `ZMUL` with `zneg` is what keeps the table on chip for `basemul`, whose twiddles are
+the signed pair `±zetas[64+i]`.
 
 ### Where the silicon goes
 
 | block | cells |
 | ----- | ----- |
-| `butterfly` incl. `mod_mult` | 2,082 |
-| `twiddle_rom` | 467 |
-| `ntt_io` | 152 |
-| **total** | **2,756** |
+| `fqmul` incl. Montgomery | 2,345 |
+| `barrett_reduce` | 1,058 |
+| `butterfly` muxing | 670 |
+| `twiddle_rom` | 468 |
+| `ntt_io` | 176 |
+| **total** | **4,718** |
 
-About 21,900 µm², or roughly **64% of a 1x2 tile's core** — against the 66.6% at which the previous 1x2 build
-hardened with +6.2 ns of setup slack.
+About 37,500 µm² — **109% of a 1x2 tile's core, 53% of a 2x2**. Carrying both reductions and a signed 16-bit
+datapath is what took this from the previous 2,756-cell build to 4,718.
+
+**On SRAM macros.** `sky130_sram_1kbyte_1rw1r_32x256_8` was considered for the coefficient array and rejected
+on three independent grounds. It is **479.78 × 397.5 µm**, and every tile this shuttle offers is **225.76 µm
+tall** — it does not fit at any size. It is **volatile**, so a table of constants placed in it must be reloaded
+at every power-up, meaning the host must still hold the table. And at 190,713 µm² it is **2.4× more expensive
+than flip-flops** for 256×12 bits, with 62% of its capacity unused. Its fixed overhead — decoders, sense amps,
+control — only amortises far above 3 kbit.
 
 ## How to test
 
@@ -145,69 +141,64 @@ Put a byte on `ui_in[7:0]`, its register number on `uio_in[2:0]`, and raise `uio
 | addr | register | | addr | register |
 | ---- | -------- | - | ---- | -------- |
 | 0 | `a[7:0]` | | 4 | `k` = twiddle index `[6:0]` |
-| 1 | `a[11:8]` | | 5 | `ctrl = { 4'b0, zneg, op[2:0] }` |
+| 1 | `a[15:8]` | | 5 | `ctrl = { 4'b0, zneg, op[2:0] }` |
 | 2 | `b[7:0]` | | 6, 7 | reserved |
-| 3 | `b[11:8]` | | | |
+| 3 | `b[15:8]` | | | |
 
 Registers persist between operations, so a host walking one NTT block only rewrites the bytes that actually
 changed — usually just the four operand bytes, since `k` and `ctrl` are constant across a whole block.
 
 ### Executing and reading back
 
-A rising edge on `uio_in[4]` (`start`) launches the operation. `ADD` answers immediately; every other op takes
-3 clocks. Three result bytes then appear on `uo_out[7:0]`, each qualified by `uio_out[5]` (`out_valid`), low
-byte first, carrying `{ b_out[11:0], a_out[11:0] }`:
+A rising edge on `uio_in[4]` (`start`) launches the operation. **`BARRETT` and `ADD` answer immediately;
+`CT`, `GS`, `FQMUL` and `ZMUL` take 3 clocks.** Four result bytes then appear on `uo_out[7:0]`, each qualified
+by `uio_out[5]` (`out_valid`), low byte first:
 
 ```
-byte 0   a_out[7:0]
-byte 1   { b_out[3:0], a_out[11:8] }
-byte 2   b_out[11:4]
+a_out[7:0]   a_out[15:8]   b_out[7:0]   b_out[15:8]
 ```
 
-Two 12-bit results pack into three bytes exactly, so a butterfly costs three read cycles rather than the four
-that two padded 16-bit values would.
-
-`uio_out[6]` (`busy`) is high from launch until the last result byte has been presented. **Poll it rather than
-counting clocks** — the latency is not the same for every op. **The operand registers must not be written
-while `busy` is high**: the datapath reads them directly for the whole operation rather than taking its own
-copy, which is part of how the design fits its tile.
+Values are **signed** two's complement. `uio_out[6]` (`busy`) is high from launch until the last result byte
+has been presented — **poll it rather than counting clocks**, since the latency depends on the op. **The
+operand registers must not be written while `busy` is high**: the datapath reads them directly for the whole
+operation rather than taking its own copy.
 
 ### Running a transform
 
 A full forward NTT is 7 layers of 128 Cooley-Tukey butterflies — **896 operations**, with the host supplying
 the twiddle *index* per block. The inverse is 896 Gentleman-Sande butterflies with the index walking down,
-followed by a 256-operation scaling pass by `n⁻¹ = 3303` in `MUL` mode. The round trip returns the original
-polynomial exactly.
+followed by a 256-operation scaling pass by `f = R²/128 mod q = 1441` in `FQMUL` mode.
 
-Polynomial multiplication is `INTT(basemul(NTT(a), NTT(b)))`. Each `basemul` is five multiplies and two adds
-over a pair of degree-1 polynomials mod `x² − ζ`, which the host composes from `MUL`, `ZMUL` and `ADD` — with
-both `ζ` and `−ζ` coming from the chip's own table.
+The round trip leaves one extra Montgomery factor: `INTT(NTT(f)) ≡ f·R (mod q)`. One `FQMUL(x, 1)` per
+coefficient removes it.
+
+Polynomial multiplication is `INTT(basemul(NTT(a), NTT(b)))`, composed from `FQMUL`, `ZMUL` and `ADD`.
 
 ### The tests
 
 ```sh
 cd test
-make                      # pin-level: all five ops, a full NTT, a round trip, basemul
-make -f Makefile_bf       # the shared five-operation datapath
-make -f Makefile_mult     # the three-stage pipelined Barrett multiplier
+make                      # pin-level: all six ops, a full NTT, a round trip, basemul
+make -f Makefile_bf       # the six-operation datapath over both reductions
+make -f Makefile_fq       # the pipelined multiply and its Montgomery reduction
+make -f Makefile_bar      # Barrett, over all 65,536 inputs
 make -f Makefile_rom      # all 128 twiddle entries
 python ntt_golden.py      # the model's own self-tests
 ```
 
-`test.py` plays the part of the host FPGA: it holds the polynomial in Python, walks the FIPS 203 address
-pattern, and streams every butterfly through the chip's pins. **Nowhere in it is a twiddle value written to
-the chip** — `test_twiddle_rom_is_on_chip` reads all 128 back out by index through `ZMUL` with `a = 1`, which
-is the test that could not have passed before the table moved on die.
+Barrett's input space is one 16-bit word, so it is tested **completely** — all 65,536 values, which matters
+because Theorem 6.2 is stated for `|a| < 2¹⁵` and `a = -32768` sits exactly on that boundary.
 
-Several checks avoid the golden model entirely, so a misreading of FIPS 203 cannot hide in model and hardware
-together: `NTT(1)` must be `(1, 0)` at every one of the 128 quadratic factors (the CRT definition), `GS` must
-undo `CT` to give `2a`, and each ROM entry is recomputed from `17^brv7(k) mod q` inside its own test.
+Several checks avoid the golden model entirely: `NTT(1)` must be `(1,0)` at every one of the 128 quadratic
+factors (the CRT definition), `GS` must undo `CT` to give `2a`, each ROM entry is recomputed from
+`centre(17^brv7(k)·R mod q)` inside its own test, and `test_both_reductions_are_present` requires Montgomery
+and Barrett to give *different* answers related by exactly `R⁻¹` — which fails if one is quietly standing in
+for the other.
 
 ## External hardware
 
 An **FPGA or MCU** to hold the polynomial and drive the transform — for this project an **Arty A7-100T**.
 
 Per butterfly the host reads `r[j]` and `r[j+len]`, writes the operand bytes that changed, pulses `start`, and
-writes the two result halves back. It tracks the twiddle *index* `k`, which FIPS 203 already defines, and
-never needs the table itself. A working reference implementation of exactly that sequencing is in
-`test/test.py`.
+writes the two result halves back. It tracks the twiddle *index* `k`, which FIPS 203 already defines, and never
+needs the table itself. A working reference implementation of exactly that sequencing is in `test/test.py`.

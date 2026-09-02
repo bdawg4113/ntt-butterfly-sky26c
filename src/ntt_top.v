@@ -4,35 +4,46 @@
 //        pins  <-------> |   ntt_io     |  operand registers, launch, unload
 //                        +--+--------+--+
 //                       k |          | a, b, zeta, op
-//                  +------v-----+  +-v------------+
-//                  | twiddle_rom|  |  butterfly   |
-//                  |  128 x 12  |->| CT GS MUL    |
-//                  +------------+ z| ZMUL ADD     |
-//                                  +------+-------+
-//                                         |
-//                                  +------v-------+
-//                                  |  mod_mult    |  3-stage Barrett
-//                                  +--------------+
+//                  +------v-----+  +-v----------------+
+//                  | twiddle_rom|  |    butterfly     |
+//                  |  128 x 12  |->| CT GS FQMUL ZMUL |
+//                  |  Montgomery| z| BARRETT ADD      |
+//                  +------------+  +--+------------+--+
+//                                     |            |
+//                             +-------v-----+  +---v-------------+
+//                             |    fqmul    |  | barrett_reduce  |
+//                             | 3-stage,    |  | combinational,  |
+//                             | Theorem 6.1 |  | Theorem 6.2     |
+//                             +-------------+  +-----------------+
+//
+// ---------------------------------------------------------------------------
+// Both reductions, on chip
+// ---------------------------------------------------------------------------
+// Montgomery (inside fqmul) and Barrett (standalone) are both here, doing the
+// jobs the textbook assigns them: Montgomery after every multiply, where the R
+// bookkeeping is free; Barrett after chains of additions, where no R factor is
+// involved and the value simply needs to come back into range.
+//
+// Having both is what makes the inverse transform cost one multiply per
+// butterfly instead of two. An earlier revision had no Barrett unit and did
+// range reduction as fqmul(x, R mod q), which is arithmetically sound but
+// occupies the multiplier for a second pass on every Gentleman-Sande butterfly.
 //
 // ---------------------------------------------------------------------------
 // What is on chip and what is not
 // ---------------------------------------------------------------------------
-// The twiddle table is here. The polynomial is not, and that is not a matter
-// of effort: 256 coefficients of 12 bits is 3,072 flip-flops, which at roughly
-// 26 um2 for an enable flop is about 80,800 um2 -- 222% of a 1x2 tile's
-// 36,347 um2 of die, before a single read multiplexer, write decoder or gate
-// of arithmetic. A build that held the array measured 24,706 cells with
-// coeff_mem accounting for 21,248 of them, 86% of the design, and needed 8x2.
-//
-// The twiddle ROM is the opposite trade. It is 467 cells, it removes a
-// 128-entry table from the host's memory map, and it turns the per-block
-// twiddle write into a single index byte. Constants belong on chip; state that
-// scales with the problem size does not, when the tile is this size.
+// The twiddle table is here, in Montgomery form. The polynomial is not, and
+// that is arithmetic rather than preference: 256 coefficients of 16 bits is
+// 4,096 flip-flops, which no Tiny Tapeout tile can hold. Nor can an SRAM macro
+// substitute -- sky130_sram_1kbyte_1rw1r_32x256_8 is 479.78 x 397.5 um, and
+// every tile this shuttle offers is 225.76 um tall, so it does not fit at any
+// size. It would also be volatile, which for a table of constants means the
+// host must reload it at every power-up and therefore must still hold it.
 //
 // So the host holds the 256 coefficients and walks the FIPS 203 address
 // pattern; the chip holds the constants and does every piece of modular
-// arithmetic the transform needs. Both transforms, and basemul, are covered by
-// the five ops in butterfly.v.
+// arithmetic the transform needs. Both transforms and basemul are covered by
+// the six ops in butterfly.v.
 
 `default_nettype none
 
@@ -49,14 +60,14 @@ module ntt_top (
     output wire       busy
 );
 
-    wire [6:0]  k_idx;
-    wire [11:0] rom_zeta;
+    wire [6:0]         k_idx;
+    wire signed [11:0] rom_zeta;
 
-    wire [2:0]  op;
-    wire        issue;
-    wire [11:0] a, b, zeta;
-    wire [11:0] a_out, b_out;
-    wire        mul_done;
+    wire [2:0]         op;
+    wire               issue;
+    wire signed [15:0] a, b, zeta;
+    wire signed [15:0] a_out, b_out;
+    wire               mul_done;
 
     ntt_io u_io (
         .clk       (clk),

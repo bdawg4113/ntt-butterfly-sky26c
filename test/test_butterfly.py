@@ -1,14 +1,16 @@
-# test_butterfly.py -- the shared five-operation datapath.
+# test_butterfly.py -- the six-operation datapath, over both reductions.
 #
-# One multiplier, one adder and two subtractors serve CT, GS, MUL, ZMUL and
-# ADD, so the failure mode to hunt is cross-talk: a mux that leaks the forward
-# transform's post-multiply subtract into the inverse's output, or an operand
-# select that survives an op change. The tests therefore interleave the ops
-# rather than running each in a clean block.
+# One pipelined multiplier and one Barrett reducer serve CT, GS, FQMUL, ZMUL,
+# BARRETT and ADD, so the failure mode to hunt is cross-talk: a mux that leaks
+# the forward transform's post-multiply subtract into the inverse's output, or a
+# Barrett input that stays wired to the GS sum when the standalone BARRETT op
+# runs. The tests therefore interleave the ops rather than running each in a
+# clean block.
 #
-# a, b and zeta must hold steady from in_valid to out_valid -- the post-multiply
-# adder and subtractor read them live instead of from a delay chain. That is
-# part of the contract, and it is why the caller keeps them in registers.
+# Two latencies live here. CT, GS, FQMUL and ZMUL occupy the multiplier and take
+# three clocks; BARRETT and ADD are combinational and answer immediately. That
+# is deliberate -- it is the whole reason a standalone Barrett unit was worth
+# the area -- and test_each_op pins both down.
 
 import random
 from collections import Counter
@@ -17,11 +19,10 @@ import cocotb
 from cocotb.clock import Clock
 from cocotb.triggers import RisingEdge, ReadOnly, NextTimeStep
 
-from ntt_golden import (Q, ZETAS, apply_op, OP_NAMES,
-                        OP_CT, OP_GS, OP_MUL, OP_ZMUL, OP_ADD)
+from ntt_golden import (Q, R, ZETAS, apply_op, OP_NAMES, MUL_OPS, s16,
+                        OP_CT, OP_GS, OP_FQMUL, OP_ZMUL, OP_BARRETT, OP_ADD)
 
-MUL_OPS = [OP_CT, OP_GS, OP_MUL, OP_ZMUL]
-ALL_OPS = MUL_OPS + [OP_ADD]
+ALL_OPS = [OP_CT, OP_GS, OP_FQMUL, OP_ZMUL, OP_BARRETT, OP_ADD]
 LATENCY = 3
 
 
@@ -39,24 +40,24 @@ async def reset(dut):
 
 
 def outputs(dut):
-    return int(dut.a_out.value), int(dut.b_out.value)
+    return s16(int(dut.a_out.value)), s16(int(dut.b_out.value))
 
 
 async def run_op(dut, op, a, b, zeta):
-    """Issue one operation and return its result.
+    """Issue one operation and return (result, clocks).
 
-    ADD uses no multiply, so its outputs are combinational and live in the same
-    cycle; out_valid never pulses for it. Everything else waits three clocks.
+    BARRETT and ADD use no multiplier, so their outputs are combinational and
+    live in the same cycle; out_valid never pulses for them.
     """
     dut.op.value = op
     dut.a.value = a
     dut.b.value = b
     dut.zeta.value = zeta
-    dut.in_valid.value = 1 if op != OP_ADD else 0
+    dut.in_valid.value = 1 if op in MUL_OPS else 0
     await RisingEdge(dut.clk)
     dut.in_valid.value = 0
 
-    if op == OP_ADD:
+    if op not in MUL_OPS:
         await ReadOnly()
         got = outputs(dut)
         await NextTimeStep()
@@ -77,125 +78,138 @@ async def run_op(dut, op, a, b, zeta):
 
 @cocotb.test()
 async def test_each_op(dut):
-    """Each operation over random field elements, with its latency checked
-    constant."""
+    """Each operation over the ranges that actually occur, with its latency
+    checked constant."""
     cocotb.start_soon(Clock(dut.clk, 20, unit="ns").start())
     await reset(dut)
 
     random.seed(91)
     for op in ALL_OPS:
-        cases = [(0, 0, ZETAS[1]), (Q - 1, Q - 1, ZETAS[127]),
-                 (0, Q - 1, ZETAS[64]), (Q - 1, 0, ZETAS[1])]
-        cases += [(random.randrange(Q), random.randrange(Q), random.choice(ZETAS))
-                  for _ in range(200)]
+        cases = [(0, 0, ZETAS[1]), (1, -1, ZETAS[1]), (-3328, 3328, ZETAS[64]),
+                 (16628, -16628, ZETAS[127])]
+        cases += [(random.randrange(-16628, 16629),
+                   random.randrange(-16628, 16629),
+                   random.choice(ZETAS)) for _ in range(200)]
         seen = Counter()
         for a, b, z in cases:
             got, n = await run_op(dut, op, a, b, z)
-            exp = apply_op(op, a, b, z)
+            exp = tuple(s16(v) for v in apply_op(op, a, b, z))
             assert got == exp, \
                 f"{OP_NAMES[op]}(a={a}, b={b}, zeta={z}): got {got}, expected {exp}"
-            assert all(v < Q for v in got), f"{OP_NAMES[op]} produced a value >= q"
             seen[n] += 1
         assert len(seen) == 1, f"{OP_NAMES[op]}: variable latency {dict(seen)}"
-        want = 0 if op == OP_ADD else LATENCY
+        want = LATENCY if op in MUL_OPS else 0
         assert list(seen)[0] == want, \
             f"{OP_NAMES[op]} latency {list(seen)[0]}, expected {want}"
-        dut._log.info(f"{OP_NAMES[op]:<5}: {len(cases)} operations correct, "
+        dut._log.info(f"{OP_NAMES[op]:<7}: {len(cases)} operations correct, "
                       f"{list(seen)[0]} clocks each")
 
 
 @cocotb.test()
 async def test_op_interleaving(dut):
-    """The five operations share one multiplier, one adder and two subtractors.
-    Change the op every single operation, so any mux wired to the wrong source
-    shows up immediately."""
+    """The six operations share one multiplier and one Barrett unit. Change the
+    op every single operation, so any mux wired to the wrong source shows up
+    immediately."""
     cocotb.start_soon(Clock(dut.clk, 20, unit="ns").start())
     await reset(dut)
 
     random.seed(92)
-    for _ in range(600):
+    for _ in range(700):
         op = random.choice(ALL_OPS)
-        a, b = random.randrange(Q), random.randrange(Q)
+        a = random.randrange(-16628, 16629)
+        b = random.randrange(-16628, 16629)
         z = random.choice(ZETAS)
         got, _ = await run_op(dut, op, a, b, z)
-        exp = apply_op(op, a, b, z)
+        exp = tuple(s16(v) for v in apply_op(op, a, b, z))
         assert got == exp, \
             f"{OP_NAMES[op]}(a={a}, b={b}, zeta={z}): got {got}, expected {exp}"
-    dut._log.info("600 operations with the op changing every time: no cross-talk")
+    dut._log.info("700 operations with the op changing every time: no cross-talk")
 
 
 @cocotb.test()
-async def test_ct_gs_are_inverse(dut):
-    """CT and GS must undo each other up to the factor of 2 that a single
-    butterfly layer introduces -- checked against the hardware alone, with no
-    reference to the Python model.
+async def test_barrett_shared_between_gs_and_standalone(dut):
+    """One Barrett unit has two callers: GS reduces a+b through it, the
+    standalone BARRETT op reduces a. The mux between them is the piece that
+    would corrupt the inverse transform silently.
 
-        CT: (a, b) -> (a + zb, a - zb)
-        GS on that pair, same zeta: (2a, z(a - zb - a - zb)) = (2a, -2z^2 b)
-
-    So the first output must be 2a mod q. That is a property of the two
-    butterflies being genuine inverses of one another, and it is the reason one
-    datapath can serve both transforms.
+    Drive the standalone op and the GS op alternately with operands chosen so
+    that a wrong mux gives a plausible-but-wrong field element.
     """
     cocotb.start_soon(Clock(dut.clk, 20, unit="ns").start())
     await reset(dut)
 
     random.seed(93)
-    for _ in range(200):
-        a, b = random.randrange(Q), random.randrange(Q)
+    for _ in range(300):
+        a = random.randrange(-16628, 16629)
+        b = random.randrange(-16628, 16629)
         z = random.choice(ZETAS)
-        (x, y), _ = await run_op(dut, OP_CT, a, b, z)
-        (p, _unused), _ = await run_op(dut, OP_GS, x, y, z)
-        assert p == (2 * a) % Q, \
-            f"GS(CT(a={a}, b={b}, z={z}))[0] = {p}, expected {(2 * a) % Q}"
-    dut._log.info("GS undoes CT: the first output is 2a for 200 random inputs")
+
+        (ba, bb), _ = await run_op(dut, OP_BARRETT, a, b, z)
+        assert ba == bb, "BARRETT outputs should mirror"
+        assert (ba - a) % Q == 0 and abs(ba) <= Q // 2 + 1, \
+            f"standalone BARRETT({a}) = {ba} is wrong"
+
+        (ga, _gb), _ = await run_op(dut, OP_GS, a, b, z)
+        assert (ga - s16(a + b)) % Q == 0 and abs(ga) <= Q // 2 + 1, \
+            f"GS a_out did not Barrett-reduce a+b (a={a}, b={b}) -> {ga}"
+    dut._log.info("the shared Barrett unit serves GS and the standalone op "
+                  "without cross-talk, over 300 cases")
 
 
 @cocotb.test()
-async def test_mul_ignores_zeta_and_zmul_ignores_b(dut):
-    """MUL is a*b and must not see the twiddle; ZMUL is z*a and must not see b.
-    These are the two operand multiplexers that would silently corrupt basemul,
-    and a wrong one still produces a plausible-looking field element."""
+async def test_both_reductions_are_present(dut):
+    """The two reductions must be genuinely different units doing different
+    jobs -- not one standing in for the other.
+
+    Montgomery introduces a factor R^-1; Barrett does not. So for the same
+    input, FQMUL(a, 1) and BARRETT(a) must give DIFFERENT answers that are
+    related by exactly that factor. If Barrett had been implemented as
+    fqmul(x, R mod q), the two would agree, and this test would fail.
+    """
     cocotb.start_soon(Clock(dut.clk, 20, unit="ns").start())
     await reset(dut)
 
     random.seed(94)
-    for _ in range(100):
-        a, b = random.randrange(Q), random.randrange(Q)
+    differed = 0
+    for _ in range(200):
+        a = random.randrange(-16628, 16629)
+        (m, _x), _ = await run_op(dut, OP_FQMUL, a, 1, 0)     # montgomery_reduce(a)
+        (t, _y), _ = await run_op(dut, OP_BARRETT, a, 0, 0)   # barrett(a)
 
-        seen = set()
-        for z in (0, 1, ZETAS[1], ZETAS[127], Q - 1):
-            got, _ = await run_op(dut, OP_MUL, a, b, z)
-            seen.add(got[0])
-        assert len(seen) == 1, f"MUL({a},{b}) depends on zeta: {seen}"
-        assert seen.pop() == (a * b) % Q
-
-        z = random.choice(ZETAS)
-        seen = set()
-        for bb in (0, 1, Q - 1, random.randrange(Q)):
-            got, _ = await run_op(dut, OP_ZMUL, a, bb, z)
-            seen.add(got[0])
-        assert len(seen) == 1, f"ZMUL({a},z={z}) depends on b: {seen}"
-        assert seen.pop() == (z * a) % Q
-    dut._log.info("MUL ignores zeta and ZMUL ignores b, over 100 random cases each")
+        # Barrett preserves the residue; Montgomery multiplies it by R^-1.
+        assert (t - a) % Q == 0, "Barrett changed the residue"
+        assert (m * R - a) % Q == 0, "Montgomery did not apply R^-1"
+        if m != t:
+            differed += 1
+    assert differed > 150, \
+        (f"only {differed}/200 inputs distinguished the two reductions -- "
+         f"are they the same unit?")
+    dut._log.info(f"Montgomery and Barrett are distinct units: {differed}/200 "
+                  f"inputs give different results, related by exactly R^-1")
 
 
 @cocotb.test()
-async def test_outputs_mirror_where_they_should(dut):
-    """MUL and ZMUL return one value on both outputs; CT, GS and ADD return two
-    genuinely different ones. Getting this wrong makes a host read garbage out
-    of b_out and only notice several butterflies later."""
+async def test_ct_gs_are_inverse(dut):
+    """CT and GS must undo each other up to the factor of 2 a single butterfly
+    layer introduces -- checked against the hardware alone.
+
+        CT: (a, b) -> (a + zb, a - zb)
+        GS on that pair, same zeta: a_out = barrett(2a)
+
+    So the first output must be 2a reduced mod q. That is a property of the two
+    butterflies being genuine inverses, and it is why one datapath serves both
+    transforms.
+    """
     cocotb.start_soon(Clock(dut.clk, 20, unit="ns").start())
     await reset(dut)
 
     random.seed(95)
-    for _ in range(150):
-        a, b = random.randrange(1, Q), random.randrange(1, Q)
-        z = random.choice(ZETAS[1:])
-        for op in (OP_MUL, OP_ZMUL):
-            (x, y), _ = await run_op(dut, op, a, b, z)
-            assert x == y, f"{OP_NAMES[op]} outputs should mirror: {x} vs {y}"
-        for op in (OP_CT, OP_GS, OP_ADD):
-            got, _ = await run_op(dut, op, a, b, z)
-            assert got == apply_op(op, a, b, z)
-    dut._log.info("MUL and ZMUL mirror; CT, GS and ADD carry two distinct results")
+    for _ in range(200):
+        a = random.randrange(-1664, 1665)
+        b = random.randrange(-1664, 1665)
+        z = random.choice(ZETAS)
+        (x, y), _ = await run_op(dut, OP_CT, a, b, z)
+        (p, _q), _ = await run_op(dut, OP_GS, x, y, z)
+        assert (p - 2 * a) % Q == 0, \
+            f"GS(CT(a={a}, b={b}, z={z}))[0] = {p}, expected 2a = {2 * a} mod q"
+    dut._log.info("GS undoes CT: the first output is 2a mod q for 200 inputs")

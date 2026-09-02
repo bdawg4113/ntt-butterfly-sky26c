@@ -3,18 +3,22 @@ project:
   title:        "ML-KEM NTT/INTT Accelerator"      # Project title
   author:       "Brendon"      # Your name
   discord:      ""      # Your discord username, for communication and automatically assigning you a Tapeout role (optional)
-  description:  "Modular arithmetic engine for the ML-KEM-512 number theoretic transform: Cooley-Tukey and Gentleman-Sande butterflies and an on-chip twiddle ROM over a pipelined Barrett multiplier."      # One line description of what your project does
+  description:  "Modular arithmetic engine for the ML-KEM-512 number theoretic transform: Cooley-Tukey and Gentleman-Sande butterflies over BOTH Montgomery and Barrett reduction, with the twiddle table on chip."      # One line description of what your project does
   language:     "Verilog" # other examples include SystemVerilog, Amaranth, VHDL, etc
   clock_hz:     50000000       # 50 MHz -- matches CLOCK_PERIOD: 20 (ns) in src/config.json
   # How many tiles your design occupies? A single tile is about 167x108 uM.
   #
-  # Synthesis puts the design at 2,756 cells, about 21,900 um2 at this
-  # project's measured 7.94 um2 per cell -- roughly 64% of a 1x2 tile's core,
-  # against the 66.6% at which the previous 1x2 build hardened with +6.2 ns of
-  # setup slack. The twiddle ROM is on chip (467 cells); the 256-coefficient
-  # polynomial is not, because 3,072 flip-flops is about 80,800 um2 -- 222% of
-  # this tile's 36,347 um2 of die before any logic at all.
-  tiles: "1x2"          # Valid values: 1x1, 1x2, 2x2, 3x2, 4x2, 6x2 or 8x2
+  # Synthesis puts the design at 4,718 cells, about 37,500 um2 at this
+  # project's measured 7.94 um2 per cell. That is 109% of a 1x2 tile's core
+  # and 53% of a 2x2, so 2x2 it is. The growth over the previous 1x2 build
+  # (2,756 cells) is the price of carrying both reductions and a signed
+  # 16-bit datapath: fqmul 2,345 cells, barrett_reduce 1,058, twiddle_rom
+  # 468, ntt_io 176, butterfly muxing 670.
+  #
+  # An SRAM macro was considered for the coefficient array and rejected:
+  # sky130_sram_1kbyte_1rw1r_32x256_8 is 479.78 x 397.5 um and every tile
+  # this shuttle offers is 225.76 um tall, so it does not fit at any size.
+  tiles: "2x2"          # Valid values: 1x1, 1x2, 2x2, 3x2, 4x2, 6x2 or 8x2
 
   # Your top module name must start with "tt_um_". Make it unique by including your github username:
   top_module:  "tt_um_ntt"
@@ -28,9 +32,8 @@ project:
   - "ntt_io.v"
   - "twiddle_rom.v"
   - "butterfly.v"
-  - "mod_mult.v"
-  - "mod_add.v"
-  - "mod_sub.v"
+  - "fqmul.v"
+  - "barrett_reduce.v"
 
 # The pinout of your project. Leave unused pins blank. DO NOT delete or add any pins.
 # This section is for the datasheet/website. Use descriptive names (e.g., RX, TX, MOSI, SCL, SEG_A, etc.).

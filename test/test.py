@@ -8,7 +8,7 @@
 # play the part of the host FPGA: they hold the 256-coefficient polynomial in
 # Python, walk the FIPS 203 address pattern, and stream each butterfly's
 # operands through the chip -- passing the twiddle INDEX k, never the value.
-# Nowhere in this file is a zeta looked up; that is the point.
+# Nowhere in this file is a zeta written to the chip; that is the point.
 #
 # Pin protocol (see src/ntt_io.v):
 #   ui_in[7:0]   write data       uio_in[2:0] register address
@@ -21,9 +21,10 @@ import cocotb
 from cocotb.clock import Clock
 from cocotb.triggers import RisingEdge, ClockCycles, ReadOnly, NextTimeStep
 
-from ntt_golden import (Q, N, ZETAS, NINV, ntt, invntt, apply_op, basemul,
-                        mod_mult, OP_CT, OP_GS, OP_MUL, OP_ZMUL, OP_ADD,
-                        OP_NAMES)
+from ntt_golden import (Q, N, R, R_MOD_Q, ZETAS, F, s16, centre,
+                        ntt, invntt, apply_op, basemul, montgomery_reduce,
+                        barrett_reduce, OP_NAMES,
+                        OP_CT, OP_GS, OP_FQMUL, OP_ZMUL, OP_BARRETT, OP_ADD)
 
 # register map
 A_LO, A_HI, B_LO, B_HI, K_IDX, CTRL = range(6)
@@ -31,7 +32,7 @@ A_LO, A_HI, B_LO, B_HI, K_IDX, CTRL = range(6)
 WE_BIT, START_BIT = 3, 4
 OUT_VALID_BIT, BUSY_BIT = 5, 6
 
-# longest operation is 3 multiplier clocks plus three result bytes
+# longest operation is 3 multiplier clocks plus four result bytes
 OP_TIMEOUT = 40
 
 
@@ -76,7 +77,7 @@ class Accel:
         self.shadow[addr] = val
 
     async def execute(self):
-        """Pulse start and collect the three result bytes."""
+        """Pulse start and collect the four result bytes."""
         d = self.dut
         d.uio_in.value = 1 << START_BIT
         await RisingEdge(d.clk)
@@ -84,22 +85,22 @@ class Accel:
 
         out = []
         guard = 0
-        while len(out) < 3:
+        while len(out) < 4:
             await ReadOnly()
             if pin(d.uio_out, OUT_VALID_BIT):
                 out.append(bus(d.uo_out))
             await NextTimeStep()
-            if len(out) < 3:
+            if len(out) < 4:
                 await RisingEdge(d.clk)
             guard += 1
-            assert guard < OP_TIMEOUT, \
-                f"timed out with {len(out)}/3 result bytes"
+            assert guard < OP_TIMEOUT, f"timed out with {len(out)}/4 result bytes"
 
-        packed = out[0] | (out[1] << 8) | (out[2] << 16)
-        return packed & 0xFFF, (packed >> 12) & 0xFFF
+        return s16(out[0] | (out[1] << 8)), s16(out[2] | (out[3] << 8))
 
-    async def op(self, op, a, b, k=0, zneg=0):
+    async def op(self, op, a, b=0, k=0, zneg=0):
         """Run one operation. The twiddle is selected by index, not value."""
+        a &= 0xFFFF
+        b &= 0xFFFF
         await self.write(A_LO, a)
         await self.write(A_HI, a >> 8)
         await self.write(B_LO, b)
@@ -112,8 +113,7 @@ class Accel:
 def zeta_of(k, zneg=0):
     """What the chip's ROM will supply for this index -- used only to build the
     expected value, never written to the chip."""
-    z = ZETAS[k]
-    return (Q - z) % Q if zneg else z
+    return -ZETAS[k] if zneg else ZETAS[k]
 
 
 @cocotb.test()
@@ -126,64 +126,95 @@ async def test_all_ops_through_pins(cocotb_dut):
 
     random.seed(71)
     checked = 0
-    for op in (OP_CT, OP_GS, OP_MUL, OP_ZMUL, OP_ADD):
+    for op in (OP_CT, OP_GS, OP_FQMUL, OP_ZMUL, OP_BARRETT, OP_ADD):
         for _ in range(20):
-            a = random.randrange(Q)
-            b = random.randrange(Q)
+            a = random.randrange(-3328, 3329)
+            b = random.randrange(-3328, 3329)
             k = random.randrange(1, 128)
             zneg = random.randrange(2)
             got = await acc.op(op, a, b, k, zneg)
-            exp = apply_op(op, a, b, zeta_of(k, zneg))
+            exp = tuple(s16(v) for v in apply_op(op, a, b, zeta_of(k, zneg)))
             assert got == exp, (f"{OP_NAMES[op]}(a={a},b={b},k={k},zneg={zneg}): "
                                 f"got {got} expected {exp}")
             checked += 1
-    dut._log.info(f"{checked} operations across all five ops correct via the pins")
+    dut._log.info(f"{checked} operations across all six ops correct via the pins")
 
 
 @cocotb.test()
-async def test_twiddle_rom_is_on_chip(cocotb_dut):
-    """The host never sends a twiddle value -- only an index. Sweep all 128
-    indices through OP_ZMUL, which returns z*a directly, and check the chip
-    produced the right constant from its own table.
+async def test_both_reductions_reachable_from_pins(cocotb_dut):
+    """Both reductions must be usable from outside, and must be different.
 
-    This is the test that would have failed before the ROM moved on chip: with
-    no table in silicon there is nothing for an index to select."""
+    FQMUL(a, 1) is a bare Montgomery reduction; BARRETT(a) is Barrett. Barrett
+    preserves the residue, Montgomery multiplies it by R^-1 -- so the two give
+    different answers for almost every input, related by exactly that factor.
+    If Barrett had been folded onto the multiplier as fqmul(x, R mod q), they
+    would agree and this test would fail.
+    """
     dut = cocotb_dut
     cocotb.start_soon(Clock(dut.clk, 20, unit="ns").start())
     acc = Accel(dut)
     await acc.reset()
 
-    # a = 1 makes ZMUL return the twiddle itself, so the readback IS the table
-    table = []
+    random.seed(75)
+    differed = 0
+    for _ in range(120):
+        a = random.randrange(-16000, 16001)
+        m, _ = await acc.op(OP_FQMUL, a, 1)
+        t, _ = await acc.op(OP_BARRETT, a)
+        assert (t - a) % Q == 0 and abs(t) <= Q // 2 + 1, \
+            f"BARRETT({a}) = {t} is not a centred representative"
+        assert (m * R - a) % Q == 0 and abs(m) < Q, \
+            f"FQMUL({a},1) = {m} is not montgomery_reduce"
+        assert t == barrett_reduce(a) and m == montgomery_reduce(a)
+        if m != t:
+            differed += 1
+    assert differed > 90, \
+        f"only {differed}/120 inputs distinguished the two reductions"
+    dut._log.info(f"both reductions reachable through the pins and genuinely "
+                  f"distinct ({differed}/120 differ, related by R^-1)")
+
+
+@cocotb.test()
+async def test_twiddle_rom_is_on_chip(cocotb_dut):
+    """The host never sends a twiddle value -- only an index. Sweep all 128
+    indices through ZMUL, which returns fqmul(z, a), and recover the table.
+
+    With a = 1 the chip returns fqmul(z, 1) = z*R^-1 mod q, so multiplying back
+    by R recovers the stored entry. That the recovered table is the reference
+    Kyber zetas proves the constants are in silicon, not in this file."""
+    dut = cocotb_dut
+    cocotb.start_soon(Clock(dut.clk, 20, unit="ns").start())
+    acc = Accel(dut)
+    await acc.reset()
+
     for k in range(128):
         got, mirror = await acc.op(OP_ZMUL, 1, 0, k)
         assert got == mirror, "ZMUL outputs should mirror"
-        table.append(got)
-    assert table == ZETAS, "the on-chip table is not the FIPS 203 twiddle table"
+        assert (got * R - ZETAS[k]) % Q == 0, \
+            f"twiddle {k}: chip returned {got}, table holds {ZETAS[k]}"
 
     # and the negated half, which is what basemul needs
     for k in (1, 64, 65, 100, 127):
         got, _ = await acc.op(OP_ZMUL, 1, 0, k, zneg=1)
-        assert got == (Q - ZETAS[k]) % Q, f"zneg wrong at k={k}"
-    dut._log.info("all 128 twiddles read back from the chip's own ROM by index, "
+        assert (got * R + ZETAS[k]) % Q == 0, f"zneg wrong at k={k}"
+    dut._log.info("all 128 twiddles recovered from the chip's own ROM by index, "
                   "plus the negated half")
 
 
 @cocotb.test()
 async def test_register_persistence(cocotb_dut):
     """Registers hold between operations, so a host walking an NTT block only
-    rewrites what changed. Run the same operation twice writing nothing the
-    second time."""
+    rewrites what changed."""
     dut = cocotb_dut
     cocotb.start_soon(Clock(dut.clk, 20, unit="ns").start())
     acc = Accel(dut)
     await acc.reset()
 
-    a, b, k = 1234, 567, 33
+    a, b, k = 1234, -567, 33
     first = await acc.op(OP_CT, a, b, k)
     second = await acc.execute()          # no register writes at all
     assert first == second, f"registers did not persist: {first} vs {second}"
-    assert first == apply_op(OP_CT, a, b, zeta_of(k))
+    assert first == tuple(s16(v) for v in apply_op(OP_CT, a, b, zeta_of(k)))
     dut._log.info("operand registers persist across operations")
 
 
@@ -208,7 +239,7 @@ async def host_ntt(acc, coeffs):
 
 
 async def host_invntt(acc, coeffs):
-    """Inverse NTT, then the closing scale by 1/n = 3303."""
+    """Inverse NTT, then the final scale by f = 1441."""
     r = list(coeffs)
     k = 127
     length = 2
@@ -221,7 +252,7 @@ async def host_invntt(acc, coeffs):
             k -= 1
             start += 2 * length
         length <<= 1
-    return [(await acc.op(OP_MUL, x, NINV))[0] for x in r]
+    return [(await acc.op(OP_FQMUL, x, F))[0] for x in r]
 
 
 @cocotb.test()
@@ -233,7 +264,7 @@ async def test_forward_ntt(cocotb_dut):
     await acc.reset()
 
     random.seed(72)
-    v = [random.randrange(Q) for _ in range(N)]
+    v = [centre(random.randrange(Q)) for _ in range(N)]
     got = await host_ntt(acc, v)
     exp = ntt(v)
     bad = [(i, got[i], exp[i]) for i in range(N) if got[i] != exp[i]]
@@ -245,17 +276,19 @@ async def test_forward_ntt(cocotb_dut):
 
 @cocotb.test()
 async def test_ntt_intt_round_trip(cocotb_dut):
-    """NTT then INTT through the pins must return the original polynomial
-    exactly. In plain Barrett arithmetic there is no residual Montgomery factor,
-    so this is an equality and not a congruence -- and the host does not need a
-    stripping pass afterwards."""
+    """NTT then INTT through the pins must return f*R, per Eq (10.4), and a
+    single montgomery_reduce must then recover the original polynomial.
+
+    The inverse transform is where both reductions earn their place: every GS
+    butterfly Barrett-reduces its a+b path and Montgomery-reduces its multiply,
+    in the same operation."""
     dut = cocotb_dut
     cocotb.start_soon(Clock(dut.clk, 20, unit="ns").start())
     acc = Accel(dut)
     await acc.reset()
 
     random.seed(73)
-    v = [random.randrange(Q) for _ in range(N)]
+    v = [centre(random.randrange(Q)) for _ in range(N)]
 
     fwd = await host_ntt(acc, v)
     assert fwd == ntt(v), "forward transform diverged"
@@ -263,12 +296,15 @@ async def test_ntt_intt_round_trip(cocotb_dut):
     inv = await host_invntt(acc, fwd)
     assert inv == invntt(fwd), "inverse transform diverged"
 
-    bad = [(i, inv[i], v[i]) for i in range(N) if inv[i] != v[i]]
-    for i, g, e in bad[:8]:
-        dut._log.error(f"coefficient {i}: got {g}, expected {e}")
-    assert not bad, f"{len(bad)}/{N} coefficients did not survive the round trip"
+    assert all((inv[i] - v[i] * R_MOD_Q) % Q == 0 for i in range(N)), \
+        "round trip is not f*R mod q"
+
+    # strip the residual R with one FQMUL(x, 1), i.e. a bare montgomery_reduce
+    recovered = [(await acc.op(OP_FQMUL, x, 1))[0] for x in inv]
+    assert all((recovered[i] - v[i]) % Q == 0 for i in range(N)), \
+        "montgomery_reduce did not recover the original coefficients"
     dut._log.info("NTT -> INTT through the pins recovers all 256 coefficients "
-                  "exactly, with no residual factor to strip")
+                  "(Eq 10.4, then one montgomery_reduce)")
 
 
 @cocotb.test()
@@ -277,9 +313,8 @@ async def test_known_vector(cocotb_dut):
 
     NTT of the constant polynomial f(x) = 1 is, by the CRT definition, the pair
     (1, 0) at every one of the 128 quadratic factors -- f is already its own
-    remainder mod each x^2 - gamma. So the result is 1 at even indices and 0 at
-    odd ones, and no twiddle table is needed to say so.
-    """
+    remainder mod each x^2 - gamma. The datapath works in the Montgomery domain,
+    so the stored result is congruent to those values, not equal to them."""
     dut = cocotb_dut
     cocotb.start_soon(Clock(dut.clk, 20, unit="ns").start())
     acc = Accel(dut)
@@ -288,64 +323,64 @@ async def test_known_vector(cocotb_dut):
     f = [0] * N
     f[0] = 1
     got = await host_ntt(acc, f)
-    exp = [1 if i % 2 == 0 else 0 for i in range(N)]
-    assert got == exp, "NTT(1) is not (1,0) at every quadratic factor"
-    dut._log.info("NTT(1) = (1,0) at all 128 factors -- checked against the CRT "
-                  "definition, not the model")
+    for i in range(128):
+        assert got[2 * i] % Q == 1, f"factor {i}: constant term is {got[2 * i]}"
+        assert got[2 * i + 1] % Q == 0, f"factor {i}: linear term is not zero"
+    dut._log.info("NTT(1) = (1,0) at all 128 quadratic factors -- checked "
+                  "against the CRT definition, not the model")
 
 
 @cocotb.test()
 async def test_basemul(cocotb_dut):
-    """A pointwise product, composed on chip from MUL, ZMUL and ADD.
+    """A pointwise product, composed on chip from FQMUL, ZMUL and ADD.
 
     This is the operation that would force the twiddle table back into the host
     if ZMUL did not exist: its twiddles are the signed pair +/-zetas[64+i], and
-    the sign is what zneg supplies.
-    """
+    the sign is what zneg supplies."""
     dut = cocotb_dut
     cocotb.start_soon(Clock(dut.clk, 20, unit="ns").start())
     acc = Accel(dut)
     await acc.reset()
 
     random.seed(74)
-    for i in range(0, 64, 7):
+    for i in range(0, 64, 9):
         for zneg in (0, 1):
-            a0, a1, b0, b1 = (random.randrange(Q) for _ in range(4))
+            a0, a1, b0, b1 = (centre(random.randrange(Q)) for _ in range(4))
             k = 64 + i
 
-            # r0 = a0*b0 + zeta*(a1*b1)
-            t, _ = await acc.op(OP_MUL, a1, b1)
+            # r0 = fqmul(fqmul(a1,b1), zeta) + fqmul(a0,b0)
+            t, _ = await acc.op(OP_FQMUL, a1, b1)
             t, _ = await acc.op(OP_ZMUL, t, 0, k, zneg)
-            u, _ = await acc.op(OP_MUL, a0, b0)
+            u, _ = await acc.op(OP_FQMUL, a0, b0)
             r0, _ = await acc.op(OP_ADD, t, u)
 
-            # r1 = a0*b1 + a1*b0
-            t, _ = await acc.op(OP_MUL, a0, b1)
-            u, _ = await acc.op(OP_MUL, a1, b0)
+            # r1 = fqmul(a0,b1) + fqmul(a1,b0)
+            t, _ = await acc.op(OP_FQMUL, a0, b1)
+            u, _ = await acc.op(OP_FQMUL, a1, b0)
             r1, _ = await acc.op(OP_ADD, t, u)
 
             exp = basemul(a0, a1, b0, b1, zeta_of(k, zneg))
-            assert (r0, r1) == exp, \
+            assert (r0, r1) == tuple(s16(x) for x in exp), \
                 f"basemul at k={k} zneg={zneg}: got {(r0, r1)} expected {exp}"
-    dut._log.info("basemul composed on chip from MUL/ZMUL/ADD, with the twiddle "
-                  "and its negation both coming from the on-chip table")
+    dut._log.info("basemul composed on chip from FQMUL/ZMUL/ADD, with the "
+                  "twiddle and its negation both from the on-chip table")
 
 
 @cocotb.test()
-async def test_add_is_single_cycle(cocotb_dut):
-    """ADD needs no multiply, so it must answer without waiting three clocks.
-    The point of polling busy rather than counting is that the latency is not
-    the same for every op."""
+async def test_latency_differs_by_op(cocotb_dut):
+    """BARRETT and ADD use no multiplier, so they must answer sooner than the
+    ops that do. Polling busy rather than counting clocks is what makes a
+    mixed-latency datapath usable, and this is the measurement behind it."""
     dut = cocotb_dut
     cocotb.start_soon(Clock(dut.clk, 20, unit="ns").start())
     acc = Accel(dut)
     await acc.reset()
 
     async def clocks_to_first_byte(op, a, b):
-        await acc.write(A_LO, a)
-        await acc.write(A_HI, a >> 8)
-        await acc.write(B_LO, b)
-        await acc.write(B_HI, b >> 8)
+        await acc.write(A_LO, a & 0xFF)
+        await acc.write(A_HI, (a >> 8) & 0xFF)
+        await acc.write(B_LO, b & 0xFF)
+        await acc.write(B_HI, (b >> 8) & 0xFF)
         await acc.write(CTRL, op)
         d = dut
         d.uio_in.value = 1 << START_BIT
@@ -362,13 +397,16 @@ async def test_add_is_single_cycle(cocotb_dut):
             assert n < OP_TIMEOUT
             await RisingEdge(d.clk)
 
+    n_bar = await clocks_to_first_byte(OP_BARRETT, 9000, 0)
+    await ClockCycles(dut.clk, 8)
     n_add = await clocks_to_first_byte(OP_ADD, 1000, 2000)
-    # drain
-    await ClockCycles(dut.clk, 6)
-    n_mul = await clocks_to_first_byte(OP_MUL, 1000, 2000)
-    assert n_add < n_mul, \
-        f"ADD ({n_add}) should be quicker than a multiply ({n_mul})"
-    dut._log.info(f"ADD answers in {n_add} clocks, a multiply in {n_mul} -- "
+    await ClockCycles(dut.clk, 8)
+    n_mul = await clocks_to_first_byte(OP_FQMUL, 1000, 2000)
+
+    assert n_bar < n_mul and n_add < n_mul, (
+        f"BARRETT {n_bar}, ADD {n_add}, FQMUL {n_mul}: the non-multiplying ops "
+        f"should be quicker")
+    dut._log.info(f"BARRETT {n_bar} clocks, ADD {n_add}, FQMUL {n_mul} -- "
                   f"poll busy, do not count")
 
 
