@@ -1,7 +1,7 @@
 Copyright 1986-2022 Xilinx, Inc. All Rights Reserved. Copyright 2022-2023 Advanced Micro Devices, Inc. All Rights Reserved.
 ---------------------------------------------------------------------------------------------------------------------------------------------
 | Tool Version : Vivado v.2023.2 (lin64) Build 4029153 Fri Oct 13 20:13:54 MDT 2023
-| Date         : Mon Aug 31 20:11:07 2026
+| Date         : Wed Sep  2 13:53:05 2026
 | Host         : carson-matthers-ThinkPad running 64-bit Ubuntu 24.04.4 LTS
 | Command      : report_utilization -file arty_top_utilization_synth.rpt -pb arty_top_utilization_synth.pb
 | Design       : arty_top
