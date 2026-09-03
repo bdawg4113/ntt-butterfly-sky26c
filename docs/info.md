@@ -87,9 +87,14 @@ Three register stages put **one multiply in each**:
 Splitting the *reduction* across stages 2 and 3 matters as much as splitting off the product: folding both
 constant multiplies into one cycle would simply make that the new critical path.
 
-Barrett is **not** pipelined — one constant multiply, a rounding add, a shift and one more constant multiply,
-about 40 gate levels. It answers in the same cycle, which is why `BARRETT` and `ADD` have zero latency while
-the multiplying ops have three.
+Barrett **is** pipelined, in two stages, and the reason is worth recording. Its input `a` reached the output
+two ways: through both constant multiplies, and **directly** into the final subtract `c = a - t*q`. One net
+feeding a 15 ns path and a 1 ns path makes the placer pad it to protect hold, and post-layout that net carried
+**4.18 ns** of `clkdlybuf` delay before a single gate ran. Stage 1 forms the quotient and carries
+`a` in its own register; stage 2 finishes.
+
+Every op now takes **5 clocks**, `BARRETT` and `ADD` included. A uniform latency also removed a special case
+from the front end.
 
 ### Operating modes
 
@@ -150,8 +155,7 @@ changed — usually just the four operand bytes, since `k` and `ctrl` are consta
 
 ### Executing and reading back
 
-A rising edge on `uio_in[4]` (`start`) launches the operation. **`BARRETT` and `ADD` answer immediately;
-`CT`, `GS`, `FQMUL` and `ZMUL` take 3 clocks.** Four result bytes then appear on `uo_out[7:0]`, each qualified
+A rising edge on `uio_in[4]` (`start`) launches the operation. **Every op takes 5 clocks.** Four result bytes then appear on `uo_out[7:0]`, each qualified
 by `uio_out[5]` (`out_valid`), low byte first:
 
 ```

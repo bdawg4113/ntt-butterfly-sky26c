@@ -40,7 +40,7 @@
 // happen in parallel rather than in sequence.
 //
 // ---------------------------------------------------------------------------
-// Why Barrett is registered, and why every op takes three clocks
+// Why Barrett is pipelined, and why every op takes five clocks
 // ---------------------------------------------------------------------------
 // An earlier revision left barrett_reduce purely combinational so that the
 // BARRETT and ADD ops could answer in zero clocks. Post-layout timing rejected
@@ -57,15 +57,17 @@
 // breakdown at the reducer itself, which explains why one register was not
 // enough.
 //
-// So every op now takes exactly 3 clocks. That also removes a special case from
+// So every op now takes exactly 5 clocks. That also removes a special case from
 // the caller: there is one latency, not two, and out_valid means the same thing
 // for all six operations. The byte-serial interface needs four write cycles and
-// four read cycles per operation anyway, so three clocks against zero is noise.
+// four read cycles per operation anyway, so five clocks against zero is noise.
 //
-//   cycle 0   in_valid: bar_in_r latches the operand select; fqmul stage 1
-//   cycle 1   bar_r latches the reduction; fqmul stage 2
-//   cycle 2   fqmul stage 3 -- t lands at the end
-//   cycle 3   out_valid: a_out and b_out select between t, bar_r and one adder
+//   cycle 0   in_valid: bar_in_r and fqmul's operand registers latch
+//   cycle 1   barrett stage 1; fqmul stage 1 (two half products)
+//   cycle 2   barrett stage 2; fqmul stage 2 (recombine)
+//   cycle 3   bar_r latches the finished reduction; fqmul stage 3
+//   cycle 4   fqmul stage 4 -- t lands at the end
+//   cycle 5   out_valid: a_out and b_out select between t, bar_r and one adder
 //
 // a, b and zeta must hold steady from in_valid until out_valid: the outputs are
 // read live from them rather than from a delay chain, which saves 32 flip-flops
@@ -84,7 +86,7 @@ module butterfly (
     input  wire signed [15:0] zeta,        // Montgomery-domain, from the ROM
     output wire signed [15:0] a_out,
     output wire signed [15:0] b_out,
-    output wire               out_valid    // 3 clocks after in_valid, every op
+    output wire               out_valid    // 5 clocks after in_valid, every op
 );
 
     localparam [2:0] OP_CT      = 3'd0,
@@ -130,53 +132,48 @@ module butterfly (
         .out_valid (out_valid)
     );
 
-    // ---- the Barrett reducer, between two registers ------------------------
+    // ---- the Barrett reducer ----------------------------------------------
     // Shared between GS, which reduces a + b, and the standalone BARRETT op,
-    // which reduces a.
+    // which reduces a. The reducer is now pipelined internally (2 clocks), and
+    // it latches its own input, so nothing here drives its arithmetic directly.
     //
-    // Both registers are timing fixes, and each removes a different half of the
-    // path that failed post-layout. That path measured 21 ns of logic from the
-    // op register to the caller's result register, and it broke down as:
+    // bar_in_r stays because it serves a second purpose: it keeps the operand
+    // select, which fans out across the whole datapath, off the reducer's front
+    // end. Post-layout that net was carrying 4.18 ns of hold repair delay
+    // before any arithmetic ran, and the reduction was paying for it.
     //
-    //     ~5.0 ns   op[2] fanning out to every mux in the datapath
-    //    ~13.5 ns   the reduction itself: a*v, the rounding add, the shift,
-    //               t*q, the subtract
-    //     ~2.5 ns   the output mux into the result register
-    //
-    // bar_in_r cuts the first segment away from the reduction: the operand
-    // select resolves into a register of its own, so the reduction starts from
-    // a clean register output with no control fanout ahead of it. bar_r cuts
-    // the third: the output mux now selects an already-registered value.
-    //
-    // What is left is the 13.5 ns reduction alone, with a whole 20 ns clock to
-    // itself. Registering only the output -- the obvious fix -- would have left
-    // the op fanout and the reduction in series at about 18.5 ns, closing by
-    // barely 2 ns. Two registers cost 32 flip-flops and turn that into roughly
-    // 7 ns of margin.
-    //
-    // The extra cycle is free: fqmul takes three, and Barrett now finishes in
-    // two.
+    // Barrett finishes in 3 clocks against the multiplier's 5, so its result is
+    // held until the outputs are read. Holding is free: bar_r stops updating
+    // once its valid pulse has passed.
     wire signed [15:0] bar_out;
+    wire               bar_done;
 
     reg signed [15:0] bar_in_r;
-    reg               bar_v;
+    reg               bar_in_v;
     reg signed [15:0] bar_r;
-
-    barrett_reduce u_barrett (
-        .a (bar_in_r),
-        .c (bar_out)
-    );
 
     always @(posedge clk) begin
         if (rst) begin
             bar_in_r <= 16'sd0;
-            bar_v    <= 1'b0;
-            bar_r    <= 16'sd0;
+            bar_in_v <= 1'b0;
         end else begin
             if (in_valid) bar_in_r <= op_gs ? sum : a;
-            bar_v <= in_valid;
-            if (bar_v) bar_r <= bar_out;
+            bar_in_v <= in_valid;
         end
+    end
+
+    barrett_reduce u_barrett (
+        .clk       (clk),
+        .rst       (rst),
+        .in_valid  (bar_in_v),
+        .a         (bar_in_r),
+        .c         (bar_out),
+        .out_valid (bar_done)
+    );
+
+    always @(posedge clk) begin
+        if (rst)           bar_r <= 16'sd0;
+        else if (bar_done) bar_r <= bar_out;
     end
 
     // ---- output selection, from registered sources -------------------------

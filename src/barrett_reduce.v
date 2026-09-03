@@ -1,72 +1,100 @@
-// barrett_reduce.v -- signed Barrett reduction, section 6.3 and Theorem 6.2.
+// barrett_reduce.v -- signed Barrett reduction, Theorem 6.2, in two stages.
 //
-//     v = floor((2^k + q/2) / q)        k = 26, q = 3329  ->  v = 20159
+//     v = floor((2^26 + q/2)/q) = 20159
 //     t = floor((a*v + 2^25) / 2^26)
-//     barrett(a) = a - t*q
+//     c = a - t*q
 //
-// Theorem 6.2: for |a| < 2^15, barrett(a) = a (mod q) and the result lies in
-// the centred range (-q/2, q/2].
-//
-// Barrett takes a different route from Montgomery: rather than cancelling low
-// bits, it estimates the quotient a/q with a precomputed reciprocal and
-// subtracts. Congruence is immediate -- an integer multiple of q was
-// subtracted. The range claim is the part that needs the constants to be right:
-// v/2^k approximates 1/q with error at most 1/2^(k+1), so t differs from
-// round(a/q) by at most |a|/2^(k+1) + 1/2, which for |a| < 2^15 and k = 26 is
-// below 1. So t IS round(a/q) exactly, and a - t*q is the centred remainder.
-//
-// Why 2^26. The proof needs |a|/2^(k+1) below 1/2, i.e. k >= 16. Taking k = 26
-// buys a comfortable margin while keeping a*v inside 32 bits
-// (2^15 * 20159 < 2^31), which is the widest product the hardware multiplier
-// produces. The constant is chosen to make both bounds hold at once.
+// For |a| < 2^15 the theorem gives c congruent to a modulo q and lying in the
+// centred range (-q/2, q/2]. v/2^26 approximates 1/q closely enough that t is
+// exactly round(a/q), which is what makes the remainder centred rather than
+// merely bounded. The 2^25 term turns the floor into a round; without it every
+// negative input would come back one q low.
 //
 // ---------------------------------------------------------------------------
-// Why this unit exists alongside Montgomery
+// Why this is pipelined, and why one register was the wrong place to put it
 // ---------------------------------------------------------------------------
-// The two reductions are not alternatives; they do different jobs, and the
-// textbook is explicit about the division of labour. Montgomery is used after
-// every multiply, because a multiply is where the R bookkeeping is free -- the
-// twiddle carries the R and the product cancels it. Barrett is used to tidy up
-// after chains of additions, where there is no R factor involved and the value
-// simply needs to come back into range.
+// Written combinationally this block chains two multiplies, a*v and t*q, for
+// roughly 15 ns at the slow corner. That alone would not close at 20 ns once
+// buffering is added.
 //
-// That is exactly what the inverse transform needs. Gentleman-Sande adds a and
-// b every layer without any multiply on that path, so the sum grows layer over
-// layer; Barrett pulls it back with no Montgomery factor introduced. Using
-// fqmul(x, R mod q) for the same job would work arithmetically, but it would
-// occupy the multiplier for a second pass -- which is precisely the cost this
-// unit buys out.
+// It also has a subtler problem, and it is the one that dominated the first two
+// builds. The input a reaches the output twice: the long way, through both
+// multiplies, and the short way, straight into the final subtract. A register
+// driving that pair drives a 15 ns path and a 1 ns path from the same net. The
+// placer cannot satisfy both, so it pads the net to protect hold on the short
+// path, and the long path pays for it. Post-layout, 4.18 ns of hold repair
+// delay sat on that net before a single gate of arithmetic ran.
 //
-// Combinational: one constant multiply, a rounding add, an arithmetic shift and
-// one more constant multiply. Roughly 40 gate levels, comfortably inside a
-// 20 ns period on its own, so it is not pipelined and the caller does not have
-// to track a latency for it.
+// Splitting the block in two fixes both. Stage 1 forms the quotient estimate
+// and carries a forward in its own register. Stage 2 finishes. Neither stage
+// now contains a long path and a short path sharing a source, and each holds
+// one multiply rather than two:
+//
+//     stage 1   t <= (a*v + 2^25) >>> 26      one 16x15, and a rides along
+//     stage 2   c <= a_r - t*q                one small constant multiply
+//
+// Latency is 2 clocks. The caller aligns it against fqmul, which is longer.
 
 `default_nettype none
 
 module barrett_reduce (
-    input  wire signed [15:0] a,     // |a| < 2^15
-    output wire signed [15:0] c      // a mod q, in (-q/2, q/2]
+    input  wire               clk,
+    input  wire               rst,        // synchronous, active high
+    input  wire               in_valid,   // a is live this clock
+    input  wire signed [15:0] a,          // |a| < 2^15
+    output wire signed [15:0] c,          // a mod q, in (-q/2, q/2]
+    output wire               out_valid   // 2 clocks after in_valid
 );
 
     localparam signed [15:0] Q = 16'sd3329;
     localparam signed [15:0] V = 16'sd20159;   // floor((2^26 + q/2)/q)
 
-    // a*v + 2^25, then an arithmetic shift right by 26. The add is the
-    // rounding term: it is what turns a floor into a round-to-nearest, and
-    // without it t would be off by one for negative a.
-    wire signed [31:0] av = a * V;             // |av| < 2^31
-    wire signed [31:0] rounded = av + 32'sd33554432;   // + 2^25
-
-    // t = round(a/q), which for |a| < 2^15 fits easily: |t| <= 10.
-    //
+    // ---- stage 1: the quotient estimate -----------------------------------
     // An arithmetic shift, not a part-select. rounded[31:26] would be an
     // UNSIGNED slice: for negative a it would drop the sign and give a large
     // positive t, and the reduction would return nonsense for exactly half the
     // input range. >>> on a signed operand extends the sign instead.
-    wire signed [15:0] t = rounded >>> 26;
+    // t is at most 10 in magnitude for |a| < 2^15, so six bits of two's
+    // complement hold it with room to spare. Declaring it 16 bits, which is the
+    // obvious thing to write, makes t*q a 16x12 constant multiply in stage 2
+    // instead of a 6x12 one and costs three levels of logic for nothing.
+    reg signed [5:0]  s1_t;
+    reg signed [15:0] s1_a;
+    reg               s1_v;
 
-    assign c = a - t * Q;
+    wire signed [31:0] av      = a * V;                    // |av| < 2^31
+    wire signed [31:0] rounded = av + 32'sd33554432;       // + 2^25
+
+    always @(posedge clk) begin
+        if (rst) begin
+            s1_t <= 6'sd0;
+            s1_a <= 16'sd0;
+            s1_v <= 1'b0;
+        end else begin
+            s1_t <= rounded >>> 26;      // t = round(a/q), |t| <= 10
+            s1_a <= a;
+            s1_v <= in_valid;
+        end
+    end
+
+    // ---- stage 2: subtract ------------------------------------------------
+    // t is at most 10 in magnitude, so t*q is a small constant multiply and
+    // this stage is far shorter than the first.
+    reg signed [15:0] s2_c;
+    reg               s2_v;
+
+    always @(posedge clk) begin
+        if (rst) begin
+            s2_c <= 16'sd0;
+            s2_v <= 1'b0;
+        end else begin
+            s2_c <= s1_a - s1_t * Q;
+            s2_v <= s1_v;
+        end
+    end
+
+    assign c         = s2_c;
+    assign out_valid = s2_v;
 
 endmodule
 

@@ -19,7 +19,7 @@ from cocotb.triggers import RisingEdge, ReadOnly, NextTimeStep
 
 from ntt_golden import Q, R, ZETAS, fqmul, montgomery_reduce, s16
 
-LATENCY = 3
+LATENCY = 5
 
 
 async def reset(dut):

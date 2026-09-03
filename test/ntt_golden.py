@@ -196,7 +196,7 @@ OP_NAMES = {OP_CT: "CT", OP_GS: "GS", OP_FQMUL: "FQMUL",
 # from the front end. MUL_OPS records which ops actually consume a multiply,
 # which is what the transforms' cost is counted in.
 MUL_OPS = (OP_CT, OP_GS, OP_FQMUL, OP_ZMUL)
-LATENCY = 3
+LATENCY = 5
 
 
 def apply_op(op, a, b, zeta):

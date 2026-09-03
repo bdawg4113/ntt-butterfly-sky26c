@@ -7,7 +7,7 @@
 # runs. The tests therefore interleave the ops rather than running each in a
 # clean block.
 #
-# Every op takes exactly three clocks. An earlier revision let BARRETT and ADD
+# Every op takes exactly five clocks. An earlier revision let BARRETT and ADD
 # answer in zero, since neither needs the multiplier -- but that left the whole
 # Barrett reduction inside a single-cycle path from the op register to the
 # caller's result register, and post-layout timing rejected it by 1.51 ns at the
@@ -26,7 +26,7 @@ from ntt_golden import (Q, R, ZETAS, apply_op, OP_NAMES, s16,
                         OP_CT, OP_GS, OP_FQMUL, OP_ZMUL, OP_BARRETT, OP_ADD)
 
 ALL_OPS = [OP_CT, OP_GS, OP_FQMUL, OP_ZMUL, OP_BARRETT, OP_ADD]
-LATENCY = 3
+LATENCY = 5
 
 
 async def reset(dut):
@@ -49,7 +49,7 @@ def outputs(dut):
 async def run_op(dut, op, a, b, zeta):
     """Issue one operation and return (result, clocks).
 
-    Every op issues into the datapath and answers three clocks later, including
+    Every op issues into the datapath and answers five clocks later, including
     BARRETT and ADD, which ignore the multiplier's result.
     """
     dut.op.value = op
