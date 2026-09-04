@@ -3,12 +3,12 @@
 # SW Build 4029153 on Fri Oct 13 20:13:54 MDT 2023
 # IP Build 4028589 on Sat Oct 14 00:45:43 MDT 2023
 # SharedData Build 4025554 on Tue Oct 10 17:18:54 MDT 2023
-# Start of session at: Thu Sep  3 20:31:22 2026
-# Process ID: 815440
+# Start of session at: Fri Sep  4 16:20:16 2026
+# Process ID: 85059
 # Current directory: /home/carson_dawg01/projects/ml_kem/ntt-butterfly-sky26c/arty_a7_100t/vivado_project/arty_top_proj/arty_top_proj.runs/impl_1
 # Command line: vivado -log arty_top.vdi -applog -product Vivado -messageDb vivado.pb -mode batch -source arty_top.tcl -notrace
 # Log file: /home/carson_dawg01/projects/ml_kem/ntt-butterfly-sky26c/arty_a7_100t/vivado_project/arty_top_proj/arty_top_proj.runs/impl_1/arty_top.vdi
 # Journal file: /home/carson_dawg01/projects/ml_kem/ntt-butterfly-sky26c/arty_a7_100t/vivado_project/arty_top_proj/arty_top_proj.runs/impl_1/vivado.jou
-# Running On: carson-matthers-ThinkPad, OS: Linux, CPU Frequency: 801.413 MHz, CPU Physical cores: 8, Host memory: 33341 MB
+# Running On: carson-matthers-ThinkPad, OS: Linux, CPU Frequency: 2172.405 MHz, CPU Physical cores: 8, Host memory: 33341 MB
 #-----------------------------------------------------------
 source arty_top.tcl -notrace

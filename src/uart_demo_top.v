@@ -157,25 +157,30 @@ module uart_demo_top(
                 S_RD_WAIT: state <= S_RD_SEND_LSB;
 
                 S_RD_SEND_LSB: begin 
-                    tx_data <= mem_dout_a[7:0];
-                    tx_valid <= 1;                  // assert valid
+                    
 
                     // Wait until UART registers valid data: 
                     if (tx_ready) begin 
+                        tx_data <= mem_dout_a[7:0];
+                        tx_valid <= 1;                  // assert valid
                         state <= S_RD_WAIT_MSB;
                     end
                     
                 end
 
                 // 1 cycle pause allowing UART to pull tx_ready low while it transmits the LSB: 
-                S_RD_WAIT_MSB: state <= S_RD_SEND_MSB;
-                
-                S_RD_SEND_MSB: begin
+                S_RD_WAIT_MSB: begin 
+                    if (!tx_ready) begin 
+                        state <= S_RD_SEND_MSB;
+                    end
+                end
+
+                S_RD_SEND_MSB: if (tx_ready) begin
                     tx_data <= {4'h0, mem_dout_a[11:8]};
                     tx_valid <= 1; 
-                    if (tx_ready) begin
-                        state <= S_IDLE; 
-                    end
+                    
+                    state <= S_IDLE; 
+                    
                 end
 
                 // Execution Sequences

@@ -1,7 +1,7 @@
 Copyright 1986-2022 Xilinx, Inc. All Rights Reserved. Copyright 2022-2023 Advanced Micro Devices, Inc. All Rights Reserved.
 -------------------------------------------------------------------------------------------------------------------------------------------------
 | Tool Version     : Vivado v.2023.2 (lin64) Build 4029153 Fri Oct 13 20:13:54 MDT 2023
-| Date             : Thu Sep  3 22:08:10 2026
+| Date             : Fri Sep  4 17:33:15 2026
 | Host             : carson-matthers-ThinkPad running 64-bit Ubuntu 24.04.4 LTS
 | Command          : report_power -file arty_top_power_routed.rpt -pb arty_top_power_summary_routed.pb -rpx arty_top_power_routed.rpx
 | Design           : arty_top
@@ -52,14 +52,14 @@ Table of Contents
 +----------------+-----------+----------+-----------+-----------------+
 | On-Chip        | Power (W) | Used     | Available | Utilization (%) |
 +----------------+-----------+----------+-----------+-----------------+
-| Clocks         |     0.003 |        3 |       --- |             --- |
-| Slice Logic    |     0.002 |     1052 |       --- |             --- |
+| Clocks         |     0.002 |        3 |       --- |             --- |
+| Slice Logic    |     0.002 |     1053 |       --- |             --- |
 |   LUT as Logic |     0.002 |      532 |     63400 |            0.84 |
 |   CARRY4       |    <0.001 |       67 |     15850 |            0.42 |
 |   Register     |    <0.001 |      284 |    126800 |            0.22 |
 |   F7/F8 Muxes  |    <0.001 |       24 |     63400 |            0.04 |
 |   Others       |     0.000 |       31 |       --- |             --- |
-| Signals        |     0.003 |      943 |       --- |             --- |
+| Signals        |     0.004 |      944 |       --- |             --- |
 | Block RAM      |     0.002 |      0.5 |       135 |            0.37 |
 | DSPs           |     0.009 |        9 |       240 |            3.75 |
 | I/O            |     0.002 |        8 |       210 |            3.81 |
@@ -147,7 +147,7 @@ Table of Contents
 |   u_demo     |     0.019 |
 |     u_fwd_bf |     0.005 |
 |       u_mult |     0.004 |
-|     u_inv_bf |     0.005 |
+|     u_inv_bf |     0.004 |
 |       u_mult |     0.004 |
 |     u_mem    |     0.003 |
 |     u_scale  |     0.004 |

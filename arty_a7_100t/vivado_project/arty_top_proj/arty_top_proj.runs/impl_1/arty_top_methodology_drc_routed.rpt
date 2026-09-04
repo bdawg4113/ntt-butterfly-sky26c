@@ -1,7 +1,7 @@
 Copyright 1986-2022 Xilinx, Inc. All Rights Reserved. Copyright 2022-2023 Advanced Micro Devices, Inc. All Rights Reserved.
 --------------------------------------------------------------------------------------------------------------------------------------------------------------
 | Tool Version : Vivado v.2023.2 (lin64) Build 4029153 Fri Oct 13 20:13:54 MDT 2023
-| Date         : Thu Sep  3 22:08:09 2026
+| Date         : Fri Sep  4 17:33:15 2026
 | Host         : carson-matthers-ThinkPad running 64-bit Ubuntu 24.04.4 LTS
 | Command      : report_methodology -file arty_top_methodology_drc_routed.rpt -pb arty_top_methodology_drc_routed.pb -rpx arty_top_methodology_drc_routed.rpx
 | Design       : arty_top
@@ -44,7 +44,7 @@ Related violations: <none>
 
 TIMING-18#3 Warning
 Missing input or output delay  
-An input delay is missing on uart_rxd_out relative to the rising and/or falling clock edge(s) of sys_clk_pin.
+An input delay is missing on uart_rx relative to the rising and/or falling clock edge(s) of sys_clk_pin.
 Related violations: <none>
 
 TIMING-18#4 Warning
@@ -69,7 +69,7 @@ Related violations: <none>
 
 TIMING-18#8 Warning
 Missing input or output delay  
-An output delay is missing on uart_txd_in relative to the rising and/or falling clock edge(s) of sys_clk_pin.
+An output delay is missing on uart_tx relative to the rising and/or falling clock edge(s) of sys_clk_pin.
 Related violations: <none>
 
 

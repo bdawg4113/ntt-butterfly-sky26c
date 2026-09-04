@@ -4,8 +4,8 @@ module arty_top (
     input  wire       CLK100MHZ,
     input  wire [1:0] BTN,           // BTN[0] = unused, BTN[1] = reset
     output wire [3:0] LED,
-    input  wire       uart_rxd_out,  // Arty USB UART RX
-    output wire       uart_txd_in    // Arty USB UART TX
+    input  wire       uart_rx,  // Arty USB UART RX
+    output wire       uart_tx    // Arty USB UART TX
 );
 
     wire clk = CLK100MHZ;
@@ -25,8 +25,8 @@ module arty_top (
     uart_demo_top u_demo (
         .clk(clk),
         .rst(rst),
-        .uart_rx(uart_rxd_out),
-        .uart_tx(uart_txd_in),
+        .uart_rx(uart_rx),
+        .uart_tx(uart_tx),
         .phase(fsm_phase), // Can be routed to a Pmod 7-segment later
         .busy(busy)
     );
@@ -37,7 +37,7 @@ module arty_top (
 
     // ---- LED[0]: UART RX Activity ----
     // Flickers rapidly when the laptop is streaming coefficients
-    assign LED[0] = ~uart_rxd_out; 
+    assign LED[0] = ~uart_rx; 
 
     // ---- LED[1]: Busy, stretched to be humanly visible ----
     wire busy_led;
