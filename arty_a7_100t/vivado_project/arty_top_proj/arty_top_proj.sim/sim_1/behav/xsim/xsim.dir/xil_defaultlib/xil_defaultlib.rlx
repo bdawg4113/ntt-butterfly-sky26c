@@ -1,0 +1,18 @@
+0.7
+2020.2
+Oct 13 2023
+20:21:30
+/home/carson_dawg01/projects/ml_kem/ntt-butterfly-sky26c/arty_a7_100t/vivado_project/arty_top_proj/arty_top_proj.sim/sim_1/behav/xsim/glbl.v,1697210495,verilog,,,,glbl,,,,,,,,
+/home/carson_dawg01/projects/ml_kem/ntt-butterfly-sky26c/src/butterfly.v,1788462731,verilog,,/home/carson_dawg01/projects/ml_kem/ntt-butterfly-sky26c/src/coeff_mem.v,,butterfly,,,,,,,,
+/home/carson_dawg01/projects/ml_kem/ntt-butterfly-sky26c/src/coeff_mem.v,1788462731,verilog,,/home/carson_dawg01/projects/ml_kem/ntt-butterfly-sky26c/src/control_fsm.v,,coeff_mem,,,,,,,,
+/home/carson_dawg01/projects/ml_kem/ntt-butterfly-sky26c/src/control_fsm.v,1788462731,verilog,,/home/carson_dawg01/projects/ml_kem/ntt-butterfly-sky26c/src/intt_butterfly.v,,control_fsm,,,,,,,,
+/home/carson_dawg01/projects/ml_kem/ntt-butterfly-sky26c/src/intt_butterfly.v,1788462731,verilog,,/home/carson_dawg01/projects/ml_kem/ntt-butterfly-sky26c/src/intt_control_fsm.v,,intt_butterfly,,,,,,,,
+/home/carson_dawg01/projects/ml_kem/ntt-butterfly-sky26c/src/intt_control_fsm.v,1788462731,verilog,,/home/carson_dawg01/projects/ml_kem/ntt-butterfly-sky26c/src/mod_add.v,,intt_control_fsm,,,,,,,,
+/home/carson_dawg01/projects/ml_kem/ntt-butterfly-sky26c/src/mod_add.v,1788462731,verilog,,/home/carson_dawg01/projects/ml_kem/ntt-butterfly-sky26c/src/mod_mult.v,,mod_add,,,,,,,,
+/home/carson_dawg01/projects/ml_kem/ntt-butterfly-sky26c/src/mod_mult.v,1788462731,verilog,,/home/carson_dawg01/projects/ml_kem/ntt-butterfly-sky26c/src/mod_sub.v,,mod_mult,,,,,,,,
+/home/carson_dawg01/projects/ml_kem/ntt-butterfly-sky26c/src/mod_sub.v,1788462731,verilog,,/home/carson_dawg01/projects/ml_kem/ntt-butterfly-sky26c/src/twiddle_rom.v,,mod_sub,,,,,,,,
+/home/carson_dawg01/projects/ml_kem/ntt-butterfly-sky26c/src/tb_uart_demo.v,1788493245,verilog,,,,tb_uart_demo,,,,,,,,
+/home/carson_dawg01/projects/ml_kem/ntt-butterfly-sky26c/src/twiddle_rom.v,1788462731,verilog,,/home/carson_dawg01/projects/ml_kem/ntt-butterfly-sky26c/src/uart_demo_top.v,,twiddle_rom,,,,,,,,
+/home/carson_dawg01/projects/ml_kem/ntt-butterfly-sky26c/src/uart_demo_top.v,1788490333,verilog,,/home/carson_dawg01/projects/ml_kem/ntt-butterfly-sky26c/src/uart_rx.v,,uart_demo_top,,,,,,,,
+/home/carson_dawg01/projects/ml_kem/ntt-butterfly-sky26c/src/uart_rx.v,1788484762,verilog,,/home/carson_dawg01/projects/ml_kem/ntt-butterfly-sky26c/src/uart_tx.v,,uart_rx,,,,,,,,
+/home/carson_dawg01/projects/ml_kem/ntt-butterfly-sky26c/src/uart_tx.v,1788484779,verilog,,/home/carson_dawg01/projects/ml_kem/ntt-butterfly-sky26c/src/tb_uart_demo.v,,uart_tx,,,,,,,,

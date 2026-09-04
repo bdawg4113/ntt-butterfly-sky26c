@@ -1,7 +1,7 @@
 Copyright 1986-2022 Xilinx, Inc. All Rights Reserved. Copyright 2022-2023 Advanced Micro Devices, Inc. All Rights Reserved.
 ---------------------------------------------------------------------------------------------------------------------------------------------
 | Tool Version : Vivado v.2023.2 (lin64) Build 4029153 Fri Oct 13 20:13:54 MDT 2023
-| Date         : Thu Sep  3 20:53:32 2026
+| Date         : Thu Sep  3 22:07:53 2026
 | Host         : carson-matthers-ThinkPad running 64-bit Ubuntu 24.04.4 LTS
 | Command      : report_control_sets -verbose -file arty_top_control_sets_placed.rpt
 | Design       : arty_top
@@ -74,13 +74,13 @@ Table of Contents
 |     Clock Signal     |                   Enable Signal                   |    Set/Reset Signal    | Slice Load Count | Bel Load Count | Bels / Slice |
 +----------------------+---------------------------------------------------+------------------------+------------------+----------------+--------------+
 |  CLK100MHZ_IBUF_BUFG | u_demo/u_uart_rx/E[0]                             | rst                    |                2 |              4 |         2.00 |
-|  CLK100MHZ_IBUF_BUFG | u_demo/tx_data[7]_i_1__0_n_0                      |                        |                3 |              8 |         2.67 |
-|  CLK100MHZ_IBUF_BUFG | u_demo/u_fwd_fsm/j_off[7]_i_1_n_0                 | rst                    |                4 |              8 |         2.00 |
-|  CLK100MHZ_IBUF_BUFG | u_demo/u_inv_fsm/scale_i[7]_i_1_n_0               | rst                    |                4 |              8 |         2.00 |
-|  CLK100MHZ_IBUF_BUFG | u_demo/u_uart_rx/FSM_sequential_state_reg[0]_0[0] |                        |                2 |              8 |         4.00 |
-|  CLK100MHZ_IBUF_BUFG | u_demo/u_uart_rx/rst_sync_reg[1][0]               |                        |                2 |              8 |         4.00 |
-|  CLK100MHZ_IBUF_BUFG | u_demo/u_uart_tx/tx_data_1                        | rst                    |                3 |              8 |         2.67 |
 |  CLK100MHZ_IBUF_BUFG | u_demo/u_inv_fsm/j_off[7]_i_1__0_n_0              | rst                    |                2 |              8 |         4.00 |
+|  CLK100MHZ_IBUF_BUFG | u_demo/u_fwd_fsm/j_off[7]_i_1_n_0                 | rst                    |                4 |              8 |         2.00 |
+|  CLK100MHZ_IBUF_BUFG | u_demo/u_uart_tx/tx_data_1                        | rst                    |                3 |              8 |         2.67 |
+|  CLK100MHZ_IBUF_BUFG | u_demo/tx_data[7]_i_1__0_n_0                      |                        |                3 |              8 |         2.67 |
+|  CLK100MHZ_IBUF_BUFG | u_demo/u_uart_rx/FSM_sequential_state_reg[0]_0[0] |                        |                2 |              8 |         4.00 |
+|  CLK100MHZ_IBUF_BUFG | u_demo/u_inv_fsm/scale_i[7]_i_1_n_0               | rst                    |                4 |              8 |         2.00 |
+|  CLK100MHZ_IBUF_BUFG | u_demo/u_uart_rx/rst_sync_reg[1][0]               |                        |                2 |              8 |         4.00 |
 |  CLK100MHZ_IBUF_BUFG | u_demo/u_uart_tx/clk_cnt                          | rst                    |                4 |             10 |         2.50 |
 |  CLK100MHZ_IBUF_BUFG | u_demo/u_uart_rx/clk_cnt                          | rst                    |                4 |             10 |         2.50 |
 |  CLK100MHZ_IBUF_BUFG | u_busy_stretch/E[0]                               | u_demo/u_inv_fsm/SR[0] |                5 |             10 |         2.00 |
