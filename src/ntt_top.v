@@ -12,7 +12,7 @@
 //                                     |            |
 //                             +-------v-----+  +---v-------------+
 //                             |    fqmul    |  | barrett_reduce  |
-//                             | 3-stage,    |  | combinational,  |
+//                             | 5-stage,    |  | 2-stage,        |
 //                             | Theorem 6.1 |  | Theorem 6.2     |
 //                             +-------------+  +-----------------+
 //
@@ -34,11 +34,8 @@
 // ---------------------------------------------------------------------------
 // The twiddle table is here, in Montgomery form. The polynomial is not, and
 // that is arithmetic rather than preference: 256 coefficients of 16 bits is
-// 4,096 flip-flops, which no Tiny Tapeout tile can hold. Nor can an SRAM macro
-// substitute -- sky130_sram_1kbyte_1rw1r_32x256_8 is 479.78 x 397.5 um, and
-// every tile this shuttle offers is 225.76 um tall, so it does not fit at any
-// size. It would also be volatile, which for a table of constants means the
-// host must reload it at every power-up and therefore must still hold it.
+// 4,096 flip-flops, which no Tiny Tapeout tile can hold. This shuttle offers no
+// SRAM macro either, so there is no denser place to put it.
 //
 // So the host holds the 256 coefficients and walks the FIPS 203 address
 // pattern; the chip holds the constants and does every piece of modular

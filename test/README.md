@@ -7,9 +7,9 @@ are verified against the reference Kyber tables (`zetas` starting `-1044, -758, 
 
 | Command | What it covers |
 | ------- | -------------- |
-| `make` | **The hardened design.** Drives `tt_um_ntt` through the TT pins only: all six ops, both reductions reached from outside, all 128 twiddles recovered from the chip's own ROM by index, register persistence, a full forward NTT, an NTT→INTT round trip, `basemul`, and the differing latencies. |
+| `make` | **The hardened design.** Drives `tt_um_ntt` through the TT pins only: all six ops, both reductions reached from outside, all 128 twiddles recovered from the chip's own ROM by index, register persistence, a full forward NTT, an NTT→INTT round trip, `basemul`, and that the latency is uniform across all six ops. |
 | `make -f Makefile_bf` | The six-operation datapath: each op with its latency checked constant, 700 operations with the op changing every time, the shared Barrett unit's two callers, that GS undoes CT, and that the two reductions are genuinely distinct units. |
-| `make -f Makefile_fq` | The pipelined multiply: exactly 3 clocks of latency, 2,000 multiplies issued one per clock in order, Theorem 6.1's bounds, that the Montgomery factor cancels, and that `fqmul(x,1)` is a bare `montgomery_reduce`. |
+| `make -f Makefile_fq` | The pipelined multiply: exactly 5 clocks of latency, 2,000 multiplies issued one per clock in order, Theorem 6.1's bounds, that the Montgomery factor cancels, and that `fqmul(x,1)` is a bare `montgomery_reduce`. |
 | `make -f Makefile_bar` | Barrett over **all 65,536** signed 16-bit inputs, Theorem 6.2's two claims, that the quotient is `round` and not `floor`, and that `v` is the derived constant. |
 | `make -f Makefile_rom` | All 128 twiddle entries against `centre(17^brv7(k)·R mod q)`, and that the table is Montgomery rather than plain. |
 | `python ntt_golden.py` | The model's own self-tests, including both theorems' bounds. |
@@ -45,12 +45,15 @@ that:
 
 ## Operation timing
 
-| op | clocks to the first result byte |
-| -- | ------------------------------- |
-| `BARRETT`, `ADD` | 0 — no multiplier, the result is combinational |
-| `CT`, `GS`, `FQMUL`, `ZMUL` | 3 |
+| stage | clocks |
+| ----- | ------ |
+| `fqmul`, the multiply and its Montgomery reduction | 5 |
+| `barrett_reduce` | 2, plus one input register, so 3 |
+| **every op, as seen at the pins** | **5** |
 
-Poll `busy` rather than counting clocks. **Do not write the operand registers while `busy` is high** — the
+All six ops take the same 5 clocks, including `BARRETT` and `ADD`, which issue into the multiplier and ignore
+its result. Barrett finishes in 3 and its result is held until the outputs are read. Poll `busy` rather than
+counting clocks. **Do not write the operand registers while `busy` is high** — the
 datapath reads them directly for the whole operation rather than taking its own copy.
 
 ## Regenerating the twiddle ROM

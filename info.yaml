@@ -15,9 +15,9 @@ project:
   # 16-bit datapath: fqmul 2,345 cells, barrett_reduce 1,058, twiddle_rom
   # 468, ntt_io 176, butterfly muxing 670.
   #
-  # An SRAM macro was considered for the coefficient array and rejected:
-  # sky130_sram_1kbyte_1rw1r_32x256_8 is 479.78 x 397.5 um and every tile
-  # this shuttle offers is 225.76 um tall, so it does not fit at any size.
+  # The shuttle offers no SRAM macro, so the coefficient array would have to be
+  # flip-flops. 256 coefficients of 16 bits is 4,096 of them, which no tile can
+  # hold, so the host keeps the polynomial and the chip does the arithmetic.
   tiles: "2x2"          # Valid values: 1x1, 1x2, 2x2, 3x2, 4x2, 6x2 or 8x2
 
   # Your top module name must start with "tt_um_". Make it unique by including your github username:

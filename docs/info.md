@@ -76,25 +76,43 @@ Written combinationally, `fqmul` chains **three multipliers** back to back: the 
 then `·q`. That is roughly 120 gate levels in sky130, or 12–18 ns — against a 20 ns period, a margin of
 1.1–1.6×, which is none at all once place-and-route adds wire delay.
 
-Three register stages put **one multiply in each**:
+Two rules set the stage boundaries. The first is obvious: **one multiply per stage**. The second was learned
+from two failed builds, and it is the one that actually mattered.
 
-| stage | work |
-| ----- | ---- |
-| 1 | `p ← a·b` — one 16×16 |
-| 2 | `m ← (p mod± R)·QINV`, with `p[31:16]` carried alongside |
-| 3 | `c ← p_hi − (m·q)[31:16]` — one constant multiply and a 16-bit subtract |
+> **No register may drive both a long path and a short path.** The placer cannot satisfy both. It pads the
+> net to protect hold on the short path, and the long path pays. Post-layout, one such net carried **4.18 ns**
+> of `clkdlybuf` delay before a single gate of arithmetic ran, and 227 hold-repair buffers existed across the
+> design.
 
-Splitting the *reduction* across stages 2 and 3 matters as much as splitting off the product: folding both
-constant multiplies into one cycle would simply make that the new critical path.
+`fqmul` is five stages. Stage 0 exists only to obey the second rule: it latches the operands so the multiplier
+array starts from registers whose sole job is to feed it, with no control net in front of it.
 
-Barrett **is** pipelined, in two stages, and the reason is worth recording. Its input `a` reached the output
-two ways: through both constant multiplies, and **directly** into the final subtract `c = a - t*q`. One net
-feeding a 15 ns path and a 1 ns path makes the placer pad it to protect hold, and post-layout that net carried
-**4.18 ns** of `clkdlybuf` delay before a single gate ran. Stage 1 forms the quotient and carries
-`a` in its own register; stage 2 finishes.
+| stage | work | levels |
+| ----- | ---- | ------ |
+| 0 | latch operands | — |
+| 1 | `pp_hi ← a·b_hi`, `pp_lo ← a·b_lo` — two 16×8 | 46 |
+| 2 | `p ← (pp_hi << 8) + pp_lo` | 41 |
+| 3 | `m ← p_lo·QINV`, with `p[31:16]` carried | 17 |
+| 4 | `c ← p_hi − (m·q)[31:16]` | 47 |
 
-Every op now takes **5 clocks**, `BARRETT` and `ADD` included. A uniform latency also removed a special case
-from the front end.
+Splitting the 16×16 array is what stage 1 and 2 are for: measured alone it is **63 levels**, too deep for a
+20 ns period once buffering is added. Since `a·b = a·b_hi·256 + a·b_lo` with `b_hi` signed and `b_lo`
+unsigned, two 16×8 products in parallel plus a shift and an add replace it at 46 levels.
+
+Barrett is **two** stages, for the second rule rather than the first. Its input `a` reached the output twice:
+through both constant multiplies, and **directly** into the final subtract `c = a − t·q`. One net, a 15 ns
+path and a 1 ns path.
+
+| stage | work | levels |
+| ----- | ---- | ------ |
+| 1 | `t ← (a·v + 2²⁵) >>> 26`, with `a` carried in its own register | 38 |
+| 2 | `c ← a_r − t·q` | 29 |
+
+`t` is declared **6 bits**, not 16. Since `|t| ≤ 10` for `|a| < 2¹⁵`, the obvious 16-bit declaration would make
+`t·q` a 16×12 constant multiply instead of a 6×12 one, and cost three levels for nothing.
+
+Every op takes **5 clocks**, `BARRETT` and `ADD` included, which also removed a special case from the front
+end. Barrett finishes in three and its result is simply held until the outputs are read.
 
 ### Operating modes
 
@@ -115,24 +133,31 @@ the signed pair `±zetas[64+i]`.
 
 ### Where the silicon goes
 
-| block | cells |
-| ----- | ----- |
-| `fqmul` incl. Montgomery | 2,345 |
-| `barrett_reduce` | 1,058 |
-| `butterfly` muxing | 670 |
-| `twiddle_rom` | 468 |
-| `ntt_io` | 176 |
-| **total** | **4,718** |
+| block | cells | share |
+| ----- | ----- | ----- |
+| `fqmul` incl. Montgomery | 2,318 | 47.8% |
+| `barrett_reduce` | 1,182 | 24.4% |
+| `butterfly` muxing | 712 | 14.7% |
+| `twiddle_rom` | 463 | 9.6% |
+| `ntt_io` | 172 | 3.5% |
+| **total** | **4,848** | |
 
-About 37,500 µm² — **109% of a 1x2 tile's core, 53% of a 2x2**. Carrying both reductions and a signed 16-bit
-datapath is what took this from the previous 2,756-cell build to 4,718.
+That is the synthesis estimate. **Place and route measured 6,067 cells and 52,731 µm²**, or 72.7% of a 2x2
+tile's core, the rest being timing repair buffers, clock tree and tap cells the flow adds after synthesis.
+Carrying both reductions and a signed 16-bit datapath is what took this from the previous 2,756-cell build.
 
-**On SRAM macros.** `sky130_sram_1kbyte_1rw1r_32x256_8` was considered for the coefficient array and rejected
-on three independent grounds. It is **479.78 × 397.5 µm**, and every tile this shuttle offers is **225.76 µm
-tall** — it does not fit at any size. It is **volatile**, so a table of constants placed in it must be reloaded
-at every power-up, meaning the host must still hold the table. And at 190,713 µm² it is **2.4× more expensive
-than flip-flops** for 256×12 bits, with 62% of its capacity unused. Its fixed overhead — decoders, sense amps,
-control — only amortises far above 3 kbit.
+The design **closes 50 MHz**: worst setup slack `+1.955 ns` at `ss_100C_1v60` with zero violations at all nine
+corners, hold `+0.106 ns`, and DRC, LVS, antenna and inferred latch counts all zero. Total power is
+**2.623 mW**. The implied maximum frequency at the slow corner is 55.4 MHz.
+
+The arithmetic is **72%** of the design. That is the inverse of the FPGA result, where the multipliers were
+hard DSP blocks costing 5% of an Arty and 0.13% of a U55C, and it is the single biggest difference between
+the two targets.
+
+**On memory.** This shuttle offers no SRAM macro, so any array declared in the RTL becomes flip-flops and
+their read multiplexers. The 256-coefficient polynomial would be 4,096 flip-flops, which no tile can hold, so
+the host keeps it and the chip does the arithmetic. The design contains **no macros at all**: the flow
+reports `design__instance__area__macros = 0`, and all 6,067 instances are standard cells.
 
 ## How to test
 
@@ -163,9 +188,9 @@ a_out[7:0]   a_out[15:8]   b_out[7:0]   b_out[15:8]
 ```
 
 Values are **signed** two's complement. `uio_out[6]` (`busy`) is high from launch until the last result byte
-has been presented — **poll it rather than counting clocks**, since the latency depends on the op. **The
-operand registers must not be written while `busy` is high**: the datapath reads them directly for the whole
-operation rather than taking its own copy.
+has been presented. Poll it rather than counting clocks: the latency is uniform today, but polling keeps a
+host correct if a future revision changes it. **The operand registers must not be written while `busy` is
+high**: the datapath reads them directly for the whole operation rather than taking its own copy.
 
 ### Running a transform
 

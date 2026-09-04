@@ -46,12 +46,13 @@
 // ---------------------------------------------------------------------------
 // One latency for every operation
 // ---------------------------------------------------------------------------
-// All six ops take exactly three clocks. An earlier revision let BARRETT and
-// ADD answer immediately, since neither needs the multiplier -- but that put
-// the whole Barrett reduction inside a single-cycle path running from the op
-// register into the result register, and post-layout timing rejected it by
-// 1.51 ns at the slow corner. Barrett is registered now, so its latency is the
-// multiplier's, and the special case here disappeared with it.
+// All six ops take exactly five clocks, which is fqmul's latency. An earlier
+// revision let BARRETT and ADD answer immediately, since neither needs the
+// multiplier -- but that put the whole Barrett reduction inside a single-cycle
+// path running from the op register into the result register, and post-layout
+// timing rejected it by 1.51 ns at the slow corner. Barrett is pipelined now
+// and finishes in three, so its result is held until the outputs are read, and
+// the special case here disappeared with it.
 //
 // The host still polls busy rather than counting clocks. That costs nothing and
 // keeps the protocol honest if a future revision reintroduces a second

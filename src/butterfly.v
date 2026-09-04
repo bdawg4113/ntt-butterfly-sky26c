@@ -52,10 +52,11 @@
 // at op[2].
 //
 // The zero latency was never worth anything. The caller holds a, b and op still
-// for the whole operation, so Barrett already had three clocks to settle and
-// was using one of them. It is now pipelined between two registers -- see the
-// breakdown at the reducer itself, which explains why one register was not
-// enough.
+// until out_valid, so the reduction always had the multiplier's whole latency
+// available and was choosing to use one clock of it. barrett_reduce is now
+// pipelined internally, and bar_in_r in front of it keeps the operand select off
+// its critical path -- see the breakdown at the reducer itself, which explains
+// why a single register was not enough.
 //
 // So every op now takes exactly 5 clocks. That also removes a special case from
 // the caller: there is one latency, not two, and out_valid means the same thing
