@@ -70,6 +70,8 @@ proc create_report { reportName command } {
   }
 }
 OPTRACE "synth_1" START { ROLLUP_AUTO }
+set_param xicom.use_bs_reader 1
+set_param chipscope.maxJobs 4
 OPTRACE "Creating in-memory project" START { }
 create_project -in_memory -part xc7a100tcsg324-1
 
@@ -88,8 +90,6 @@ read_verilog -library xil_defaultlib {
   /home/carson_dawg01/projects/ml_kem/ntt-butterfly-sky26c/src/butterfly.v
   /home/carson_dawg01/projects/ml_kem/ntt-butterfly-sky26c/src/coeff_mem.v
   /home/carson_dawg01/projects/ml_kem/ntt-butterfly-sky26c/src/control_fsm.v
-  /home/carson_dawg01/projects/ml_kem/ntt-butterfly-sky26c/src/debounce_pulse.v
-  /home/carson_dawg01/projects/ml_kem/ntt-butterfly-sky26c/src/demo_top.v
   /home/carson_dawg01/projects/ml_kem/ntt-butterfly-sky26c/src/intt_butterfly.v
   /home/carson_dawg01/projects/ml_kem/ntt-butterfly-sky26c/src/intt_control_fsm.v
   /home/carson_dawg01/projects/ml_kem/ntt-butterfly-sky26c/src/mod_add.v
@@ -97,6 +97,9 @@ read_verilog -library xil_defaultlib {
   /home/carson_dawg01/projects/ml_kem/ntt-butterfly-sky26c/src/mod_sub.v
   /home/carson_dawg01/projects/ml_kem/ntt-butterfly-sky26c/src/pulse_stretch.v
   /home/carson_dawg01/projects/ml_kem/ntt-butterfly-sky26c/src/twiddle_rom.v
+  /home/carson_dawg01/projects/ml_kem/ntt-butterfly-sky26c/src/uart_demo_top.v
+  /home/carson_dawg01/projects/ml_kem/ntt-butterfly-sky26c/src/uart_rx.v
+  /home/carson_dawg01/projects/ml_kem/ntt-butterfly-sky26c/src/uart_tx.v
   /home/carson_dawg01/projects/ml_kem/ntt-butterfly-sky26c/src/arty_top.v
 }
 OPTRACE "Adding files" END { }

@@ -24,3 +24,10 @@ set_property -dict { PACKAGE_PIN C9 IOSTANDARD LVCMOS33 } [get_ports { BTN[1] }]
 ## Configuration options, since this board loads the bitstream via JTAG/QSPI
 set_property CONFIG_VOLTAGE 3.3 [current_design]
 set_property CFGBVS VCCO [current_design]
+
+## Exposed UART pins for USB-Serial Bridge: 
+
+## ok for future reference: 
+set_property -dict { PACKAGE_PIN D10 IOSTANDARD LVCMOS33 } [get_ports { uart_rxd_out }];    ## data comes OUT of the FTDI chip and going IN to the FPGA
+set_property -dict { PACKAGE_PIN A9  IOSTANDARD LVCMOS33 } [get_ports { uart_txd_in }];     ## Data coming OUT of the FPGA and going IN to the FTDI chip
+

@@ -1,7 +1,7 @@
 Copyright 1986-2022 Xilinx, Inc. All Rights Reserved. Copyright 2022-2023 Advanced Micro Devices, Inc. All Rights Reserved.
 -------------------------------------------------------------------------------------------------------------------------------------------------
 | Tool Version     : Vivado v.2023.2 (lin64) Build 4029153 Fri Oct 13 20:13:54 MDT 2023
-| Date             : Wed Sep  2 13:53:54 2026
+| Date             : Thu Sep  3 20:53:50 2026
 | Host             : carson-matthers-ThinkPad running 64-bit Ubuntu 24.04.4 LTS
 | Command          : report_power -file arty_top_power_routed.rpt -pb arty_top_power_summary_routed.pb -rpx arty_top_power_routed.rpx
 | Design           : arty_top
@@ -30,14 +30,14 @@ Table of Contents
 ----------
 
 +--------------------------+--------------+
-| Total On-Chip Power (W)  | 0.123        |
+| Total On-Chip Power (W)  | 0.119        |
 | Design Power Budget (W)  | Unspecified* |
 | Power Budget Margin (W)  | NA           |
-| Dynamic (W)              | 0.026        |
+| Dynamic (W)              | 0.022        |
 | Device Static (W)        | 0.097        |
 | Effective TJA (C/W)      | 4.6          |
-| Max Ambient (C)          | 84.4         |
-| Junction Temperature (C) | 25.6         |
+| Max Ambient (C)          | 84.5         |
+| Junction Temperature (C) | 25.5         |
 | Confidence Level         | Medium       |
 | Setting File             | ---          |
 | Simulation Activity File | ---          |
@@ -49,24 +49,23 @@ Table of Contents
 1.1 On-Chip Components
 ----------------------
 
-+--------------------------+-----------+----------+-----------+-----------------+
-| On-Chip                  | Power (W) | Used     | Available | Utilization (%) |
-+--------------------------+-----------+----------+-----------+-----------------+
-| Clocks                   |     0.003 |        3 |       --- |             --- |
-| Slice Logic              |     0.003 |     1147 |       --- |             --- |
-|   LUT as Logic           |     0.002 |      557 |     63400 |            0.88 |
-|   LUT as Distributed RAM |    <0.001 |       64 |     19000 |            0.34 |
-|   CARRY4                 |    <0.001 |       82 |     15850 |            0.52 |
-|   Register               |    <0.001 |      264 |    126800 |            0.21 |
-|   F7/F8 Muxes            |    <0.001 |       24 |     63400 |            0.04 |
-|   Others                 |     0.000 |       36 |       --- |             --- |
-| Signals                  |     0.004 |     1086 |       --- |             --- |
-| Block RAM                |     0.002 |      0.5 |       135 |            0.37 |
-| DSPs                     |     0.008 |       12 |       240 |            5.00 |
-| I/O                      |     0.007 |        7 |       210 |            3.33 |
-| Static Power             |     0.097 |          |           |                 |
-| Total                    |     0.123 |          |           |                 |
-+--------------------------+-----------+----------+-----------+-----------------+
++----------------+-----------+----------+-----------+-----------------+
+| On-Chip        | Power (W) | Used     | Available | Utilization (%) |
++----------------+-----------+----------+-----------+-----------------+
+| Clocks         |     0.003 |        3 |       --- |             --- |
+| Slice Logic    |     0.002 |     1052 |       --- |             --- |
+|   LUT as Logic |     0.002 |      532 |     63400 |            0.84 |
+|   CARRY4       |    <0.001 |       67 |     15850 |            0.42 |
+|   Register     |    <0.001 |      284 |    126800 |            0.22 |
+|   F7/F8 Muxes  |    <0.001 |       24 |     63400 |            0.04 |
+|   Others       |     0.000 |       31 |       --- |             --- |
+| Signals        |     0.003 |      943 |       --- |             --- |
+| Block RAM      |     0.002 |      0.5 |       135 |            0.37 |
+| DSPs           |     0.009 |        9 |       240 |            3.75 |
+| I/O            |     0.002 |        8 |       210 |            3.81 |
+| Static Power   |     0.097 |          |           |                 |
+| Total          |     0.119 |          |           |                 |
++----------------+-----------+----------+-----------+-----------------+
 
 
 1.2 Power Supply Summary
@@ -75,9 +74,9 @@ Table of Contents
 +-----------+-------------+-----------+-------------+------------+-------------+-------------+------------+
 | Source    | Voltage (V) | Total (A) | Dynamic (A) | Static (A) | Powerup (A) | Budget (A)  | Margin (A) |
 +-----------+-------------+-----------+-------------+------------+-------------+-------------+------------+
-| Vccint    |       1.000 |     0.035 |       0.019 |      0.015 |       NA    | Unspecified | NA         |
+| Vccint    |       1.000 |     0.035 |       0.020 |      0.015 |       NA    | Unspecified | NA         |
 | Vccaux    |       1.800 |     0.018 |       0.000 |      0.018 |       NA    | Unspecified | NA         |
-| Vcco33    |       3.300 |     0.006 |       0.002 |      0.004 |       NA    | Unspecified | NA         |
+| Vcco33    |       3.300 |     0.005 |       0.001 |      0.004 |       NA    | Unspecified | NA         |
 | Vcco25    |       2.500 |     0.000 |       0.000 |      0.000 |       NA    | Unspecified | NA         |
 | Vcco18    |       1.800 |     0.000 |       0.000 |      0.000 |       NA    | Unspecified | NA         |
 | Vcco15    |       1.500 |     0.000 |       0.000 |      0.000 |       NA    | Unspecified | NA         |
@@ -141,18 +140,17 @@ Table of Contents
 3.1 By Hierarchy
 ----------------
 
-+----------------+-----------+
-| Name           | Power (W) |
-+----------------+-----------+
-| arty_top       |     0.026 |
-|   u_demo       |     0.018 |
-|     u_fwd_bf   |     0.004 |
-|       u_mult   |     0.003 |
-|     u_inv_bf   |     0.003 |
-|       u_mult   |     0.003 |
-|     u_load_mul |     0.001 |
-|     u_mem      |     0.003 |
-|     u_scale    |     0.003 |
-+----------------+-----------+
++--------------+-----------+
+| Name         | Power (W) |
++--------------+-----------+
+| arty_top     |     0.022 |
+|   u_demo     |     0.019 |
+|     u_fwd_bf |     0.005 |
+|       u_mult |     0.004 |
+|     u_inv_bf |     0.005 |
+|       u_mult |     0.004 |
+|     u_mem    |     0.003 |
+|     u_scale  |     0.004 |
++--------------+-----------+
 
 
