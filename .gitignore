@@ -66,3 +66,17 @@ code/verilog/cosim/accel.log
 code/verilog/cosim/accel_in.mem
 code/verilog/cosim/accel_out.mem
 *.rpt
+
+# --- final-research: the FPGA board folders and the signoff results ---
+# The root rules above ignore build output globally (*.rpt, *.dcp, *.xclbin,
+# *.xo, *.ltx, *.so.*). Inside fpga/ and results/ those files are the evidence
+# behind the published numbers, so they are re-included.
+!fpga/**/*.rpt
+!fpga/**/*.dcp
+!fpga/**/*.xclbin
+!fpga/**/*.xo
+!fpga/**/*.ltx
+!fpga/**/*.so.*
+!fpga/**/*.bit
+!results/**
+!fpga/**/xvlog.log
