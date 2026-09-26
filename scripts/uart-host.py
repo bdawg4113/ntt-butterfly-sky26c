@@ -3,6 +3,7 @@
 import serial 
 import time 
 import struct 
+import random 
 
 # Configure COM port that matches with the Arty: 
 ser = serial.Serial('/dev/ttyUSB1', 115200, timeout = 5.0) 
@@ -30,9 +31,47 @@ def run_engine(command_byte):
 
 # Steps to run: 
 
-print("Loading Polynomial")
-# 1. Load some polynomial into the FSM: 
-original_poly = [(i * 17 + 5) % 3329 for i in range(256)]
+# print("Loading Polynomial")
+# # 1. Load some polynomial into the FSM: 
+# original_poly = [(i * 17 + 5) % 3329 for i in range(256)]
+# for i, coeff in enumerate(original_poly):
+#     write_coeff(i, coeff)
+
+# --- Replace Step 1 with this Interactive Menu --- 
+
+print("\n=== Interactive NTT Hardware Accelerator ===")
+print("How would you like to generate the 256-coefficient polynomial?")
+print("  [1] Enter custom comma-separated values")
+print("  [2] Generate a completely random polynomial")
+print("  [3] Use the default linear test formula")
+
+choice = input("Select an option (1-3): ").strip()
+original_poly = [0] * 256  # Initialize an empty array of 256 zeros
+
+if choice == '1':
+    user_str = input("Enter coefficients (e.g., 10, 20, 30...): ")
+    if user_str:
+        try:
+            # Parse input, convert to int, and safely modulo 3329
+            user_vals = [int(x.strip()) % 3329 for x in user_str.split(',')]
+            
+            # Copy user values into the array (zero-padding the rest)
+            for i in range(min(len(user_vals), 256)):
+                original_poly[i] = user_vals[i]
+                
+            print(f"Loaded {len(user_vals)} custom coefficients. Zero-padding the rest.")
+        except ValueError:
+            print("Invalid input detected. Falling back to an array of zeros.")
+            
+elif choice == '2':
+    original_poly = [random.randint(0, 3328) for _ in range(256)]
+    print("Generated an array of 256 random coefficients.")
+    
+else:
+    original_poly = [(i * 17 + 5) % 3329 for i in range(256)]
+    print("Loaded default linear formula.")
+
+print("\nLoading Polynomial into FPGA Memory...")
 for i, coeff in enumerate(original_poly):
     write_coeff(i, coeff)
 
